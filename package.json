@@ -1,0 +1,12 @@
+{
+  "name": "nexus-nas",
+  "version": "0.2.0",
+  "private": true,
+  "type": "module",
+  "engines": { "node": ">=22" },
+  "scripts": {
+    "start": "node server/main.js",
+    "test": "node --test",
+    "release:pack": "node scripts/pack.js"
+  }
+}

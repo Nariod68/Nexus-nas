@@ -1,0 +1,16 @@
+import { readFile, mkdir, writeFile } from 'node:fs/promises';
+import { files, checksum } from './bundle.js';
+import { versionParts } from '../server/releases.js';
+const root = new URL('../', import.meta.url);
+const pkg = JSON.parse(await readFile(new URL('package.json', root)));
+const version = `v${pkg.version}`;
+versionParts(version);
+if (process.env.GITHUB_REF?.startsWith('refs/tags/') && process.env.GITHUB_REF_NAME !== version) throw new Error('Le tag doit correspondre à package.json');
+const bundle = { version, files: {} };
+for (const name of files) bundle.files[name] = (await readFile(new URL(name, root))).toString('base64');
+const bytes = Buffer.from(JSON.stringify(bundle));
+const name = `nexus-${version}.json`;
+await mkdir(new URL('dist/', root), { recursive: true });
+await writeFile(new URL(`dist/${name}`, root), bytes);
+await writeFile(new URL(`dist/${name}.sha256`, root), `${checksum(bytes)}  ${name}\n`);
+console.log(`Publication préparée : ${name}`);
