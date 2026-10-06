@@ -42,12 +42,24 @@ if (location.protocol !== 'file:') {
     document.querySelector('.profile-copy small').textContent = me.role === 'admin' ? 'Administrateur' : 'Utilisateur';
     document.querySelector('.demo-tag').textContent = 'CONNECTÉ';
     document.querySelectorAll('[data-page]').forEach(b => { b.hidden = me.role !== 'admin' && b.dataset.page !== 'files'; });
-    gate.hidden = true; shell.hidden = false;
-    await refresh(true);
-    if (me.role === 'admin' && !identity.onboarding) { wizard = true; showWizard(); }
-    else showPage(me.role === 'admin' ? (pageNames.fr[location.hash.slice(1)] ? location.hash.slice(1) : 'dashboard') : 'files');
+    try {
+      if (me.role === 'admin' && !identity.onboarding) {
+        info = await api('/api/agent');
+        if (!Array.isArray(info.volumes)) throw new Error('Le service Linux n’a pas retourné la liste des volumes');
+        wizard = true; showWizard(); return;
+      }
+      await refresh(true, true);
+      gate.hidden = true; shell.hidden = false;
+      showPage(me.role === 'admin' ? (pageNames.fr[location.hash.slice(1)] ? location.hash.slice(1) : 'dashboard') : 'files');
+    } catch (error) { recoveryScreen(error.message); }
   }
-  async function refresh(full = false) {
+  function recoveryScreen(message) {
+    gate.hidden = false; shell.hidden = true;
+    gate.innerHTML = `<section class="panel login-panel"><img src="nexus-icon.svg" alt="" width="64"><h1>Compte connecté</h1><p>Votre compte est enregistré. Le serveur ne peut pas encore charger la configuration.</p><p class="login-error" role="alert">${E(message)}</p><button class="primary-button" id="setup-retry">Réessayer</button><button class="secondary-button" id="setup-signout">Déconnexion</button><p>Si le problème persiste, consultez les journaux du service Nexus et de Nexus Agent.</p></section>`;
+    gate.querySelector('#setup-retry').onclick = async event => { event.target.disabled = true; try { await connected(); } catch (error) { recoveryScreen(error.message); } };
+    gate.querySelector('#setup-signout').onclick = async () => { await api('/api/logout', { method: 'POST', body: {} }); me = null; await loginScreen(); };
+  }
+  async function refresh(full = false, strict = false) {
     if (refreshBusy || !me) return; refreshBusy = true;
     try {
       shares = await api('/api/shares');
@@ -59,7 +71,7 @@ if (location.protocol !== 'file:') {
       }
       if (full) { renderFiles(); await loadFiles(); }
       status.textContent = '';
-    } catch (e) { notify(`Connexion interrompue : ${e.message}`); }
+    } catch (e) { if (strict) throw e; notify(`Connexion interrompue : ${e.message}`); }
     finally { refreshBusy = false; }
   }
   function renderDashboard() {
@@ -76,7 +88,8 @@ if (location.protocol !== 'file:') {
   }
   function showWizard() {
     shell.hidden = true; gate.hidden = false;
-    gate.innerHTML = `<form class="panel login-panel"><img src="nexus-icon.svg" alt="" width="64"><p class="eyebrow">CONFIGURATION · STOCKAGE ET ACCÈS</p><h1>Votre premier partage</h1><p>Vous pouvez conserver les disques actuels ou préparer un disque vide. Les fichiers seront accessibles dans le navigateur et par SMB.</p><button type="button" class="secondary-button" id="wizard-disk">Préparer un disque…</button><label>Volume<select name="volume">${info.volumes.map(v => `<option value="${E(v.id)}">${E(v.name)}</option>`).join('')}</select></label>${field('Nom du partage', 'name', 'text', 'required value="documents" pattern="[a-z][a-z0-9_-]{2,19}"')}<button type="submit" class="primary-button">Créer le partage et terminer</button><button type="button" class="text-link" id="wizard-skip">Terminer sans partage</button><p class="login-error" role="alert"></p></form>`;
+    if (!info || !Array.isArray(info.volumes)) { recoveryScreen('Les volumes sont indisponibles. Réessayez lorsque le service Linux est prêt.'); return; }
+    gate.innerHTML = `<form class="panel login-panel"><img src="nexus-icon.svg" alt="" width="64"><p class="eyebrow">CONFIGURATION · STOCKAGE ET ACCÈS</p><h1>Votre premier partage</h1><p>Vous pouvez conserver les disques actuels ou préparer un disque vide. Les fichiers seront accessibles dans le navigateur et par SMB.</p>${(info.diagnostics || []).map(d => `<p class="login-error">${E(d)}</p>`).join('')}<button type="button" class="secondary-button" id="wizard-disk">Préparer un disque…</button><label>Volume<select name="volume">${info.volumes.map(v => `<option value="${E(v.id)}">${E(v.name)}</option>`).join('')}</select></label>${field('Nom du partage', 'name', 'text', 'required value="documents" pattern="[a-z][a-z0-9_-]{2,19}"')}<button type="submit" class="primary-button">Créer le partage et terminer</button><button type="button" class="text-link" id="wizard-skip">Terminer sans partage</button><p class="login-error" role="alert"></p></form>`;
     const finish = async () => { await api('/api/onboarding', { method: 'POST', body: {} }); wizard = false; gate.hidden = true; shell.hidden = false; await refresh(true); showPage('files'); };
     formSubmit(gate.querySelector('form'), async data => { await api('/api/shares/save', { method: 'POST', body: { ...data, members: [{ name: me.name, write: true }] } }); await finish(); });
     gate.querySelector('#wizard-skip').onclick = () => finish().catch(e => notify(e.message));

@@ -37,7 +37,8 @@ export class Disks {
       let reason = diskReason(disk, swaps);
       for (const child of walk(disk)) {
         // Fail closed if the kernel holders cannot be inspected.
-        if ((await readdir(`/sys/class/block/${path.basename(child.name)}/holders`)).length) reason = 'Disque utilisé par un autre périphérique';
+        try { if ((await readdir(`/sys/class/block/${path.basename(child.name)}/holders`)).length) reason = 'Disque utilisé par un autre périphérique'; }
+        catch { reason = 'Impossible de vérifier l’utilisation de ce disque dans le noyau'; }
       }
       return { ...disk, reason, canPartition: !reason, fingerprint: fingerprint(disk) };
     }));

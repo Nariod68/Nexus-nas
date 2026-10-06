@@ -93,7 +93,9 @@ async function queueJob(kind, work) {
 export async function dispatch(action, data) {
   if (action === 'state') {
     const state = await store.read();
-    return { ...state, volumes: await volumes(), disks: await disks.inventory(), update: await readFile('/var/lib/nexus-agent/update-status.json', 'utf8').then(JSON.parse).catch(() => null) };
+    const diagnostics = [];
+    const detected = await disks.inventory().catch(error => { diagnostics.push(`Détection des disques indisponible : ${error.message}`); return []; });
+    return { ...state, volumes: await volumes(), disks: detected, diagnostics, update: await readFile('/var/lib/nexus-agent/update-status.json', 'utf8').then(JSON.parse).catch(() => null) };
   }
   if (action === 'disks.plan') return disks.plan(data);
   if (action === 'disks.execute') return queueJob('partition', progress => disks.execute(data, progress));
