@@ -1,4 +1,4 @@
-import { open, realpath, readdir, lstat, mkdir, link, unlink, rename, statfs, rm } from 'node:fs/promises';
+import { open, realpath, readdir, lstat, mkdir, link, unlink, rename, statfs, rm, rmdir } from 'node:fs/promises';
 import { constants } from 'node:fs';
 import path from 'node:path';
 import { randomBytes, randomUUID } from 'node:crypto';
@@ -143,10 +143,29 @@ export async function purgeTrash(root, confirmation) {
   } finally { await dir.close(); }
 }
 export async function moveFile(root, source, destination) {
-  const from = await parent(root, source), to = await parent(root, destination);
+  const from = await parent(root, source);
+  let to;
   try {
+    to = await parent(root, destination);
     const info = await lstat(path.join(from.path, from.name));
+    if (info.isDirectory() && !info.isSymbolicLink()) {
+      // Reserve an empty destination exclusively. rename may replace this
+      // reservation, but never an existing file or a non-empty directory.
+      const destinationPath = path.join(to.path, to.name);
+      await mkdir(destinationPath, { mode: 0o770 });
+      const reserved = await lstat(destinationPath);
+      // Windows refuses replacing even an empty directory. Its directory
+      // rename also refuses a concurrently created destination.
+      if (process.platform === 'win32') await rmdir(destinationPath);
+      try { await rename(path.join(from.path, from.name), destinationPath); }
+      catch (error) {
+        const current = await lstat(destinationPath).catch(() => null);
+        if (current?.ino === reserved.ino && current?.dev === reserved.dev) await rmdir(destinationPath).catch(() => {});
+        throw error;
+      }
+      return;
+    }
     if (!info.isFile() || info.nlink !== 1) throw new Error('Seuls les fichiers ordinaires peuvent être renommés');
     await link(path.join(from.path, from.name), path.join(to.path, to.name)); await unlink(path.join(from.path, from.name));
-  } finally { await from.close(); await to.close(); }
+  } finally { await from.close(); if (to) await to.close(); }
 }

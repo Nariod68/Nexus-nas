@@ -16,7 +16,7 @@ async function audit(action, status) {
   await appendFile('/var/lib/nexus-agent/audit.jsonl', JSON.stringify({ time: new Date().toISOString(), action, status }) + '\n', { mode: 0o600 });
 }
 export function sambaConfig(shares) {
-  return ['# Managed by Nexus. Local configuration is preserved in smb.conf.', ...shares.map(s => `\n[${s.name}]\npath = ${s.path}\nbrowseable = yes\nguest ok = no\nvalid users = ${s.members.map(m => `nx_${m.name}`).join(' ')}\nread only = yes\nwrite list = ${s.members.filter(m => m.write).map(m => `nx_${m.name}`).join(' ')}\nforce user = nexus\nforce group = nexus\ncreate mask = 0660\ndirectory mask = 0770\nfollow symlinks = no\nwide links = no\nveto files = /.nexus-*/\n`)].join('\n');
+  return ['# Managed by Nexus. Local configuration is preserved in smb.conf.\n[global]\nserver min protocol = SMB2\nserver signing = mandatory\nmap to guest = Never\n', ...shares.map(s => `\n[${s.name}]\npath = ${s.path}\nbrowseable = yes\nguest ok = no\nvalid users = ${s.members.map(m => `nx_${m.name}`).join(' ')}\nread only = yes\nwrite list = ${s.members.filter(m => m.write).map(m => `nx_${m.name}`).join(' ')}\nforce user = nexus\nforce group = nexus\ncreate mask = 0660\ndirectory mask = 0770\nfollow symlinks = no\nwide links = no\nveto files = /.nexus-*/\n`)].join('\n');
 }
 async function writeSamba(shares) {
   const file = '/etc/samba/nexus-shares.conf';
@@ -128,6 +128,8 @@ export async function dispatch(action, data) {
 }
 export async function startAgent(socketPath = '/run/nexus-agent/socket') {
   if (process.platform !== 'linux' || process.getuid() !== 0) throw new Error('L’agent doit être lancé par root sous Linux');
+  // Reapply managed SMB settings to existing shares after an upgrade too.
+  await writeSamba((await store.read()).shares);
   await store.change(state => { for (const job of state.jobs) if (job.status === 'running') { job.status = 'failed'; job.message = 'Opération interrompue par le redémarrage de l’agent. Vérifier le disque avant de réessayer.'; } });
   await mkdir(path.dirname(socketPath), { recursive: true, mode: 0o750 });
   await unlink(socketPath).catch(error => { if (error.code !== 'ENOENT') throw error; });

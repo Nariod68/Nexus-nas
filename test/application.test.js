@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { createServer } from '../server/main.js';
-import { components, listFiles, uploadFile, downloadFile, trashFile, listTrash, restoreTrash, purgeTrash } from '../server/files.js';
+import { components, listFiles, uploadFile, downloadFile, trashFile, listTrash, restoreTrash, purgeTrash, moveFile } from '../server/files.js';
 import { diskReason, diskSafetyReason, partitionScript } from '../agent/disks.js';
 import { sambaConfig } from '../agent/main.js';
 import { snapshot, networkInfo } from '../server/system.js';
@@ -65,6 +65,22 @@ test('files refuse traversal and symlink escape; aborted uploads leave no file',
   await assert.rejects(trashFile(root, 'escape'));
   assert.deepEqual(await listFiles(root, ''), []);
 });
+test('directory navigation and rename preserve nested data and reject existing destinations', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-folders-')); t.after(() => rm(root, { recursive: true, force: true }));
+  await mkdir(path.join(root, 'photos')); await writeFile(path.join(root, 'photos', 'original.txt'), 'keep');
+  await moveFile(root, 'photos', 'albums');
+  assert.equal((await listFiles(root, 'albums'))[0].name, 'original.txt');
+  assert.equal(await readFile(path.join(root, 'albums', 'original.txt'), 'utf8'), 'keep');
+  await mkdir(path.join(root, 'existing'));
+  await assert.rejects(moveFile(root, 'albums', 'existing'), { code: 'EEXIST' });
+  await writeFile(path.join(root, 'occupied'), 'other');
+  await assert.rejects(moveFile(root, 'albums', 'occupied'), { code: 'EEXIST' });
+  assert.equal(await readFile(path.join(root, 'occupied'), 'utf8'), 'other');
+  await assert.rejects(moveFile(root, 'albums', 'albums/child'));
+  assert.deepEqual((await listFiles(root, 'albums')).map(f => f.name), ['original.txt']);
+  await assert.rejects(moveFile(root, 'albums', '../escape'));
+});
+
 test('partition guard protects mounted, swap, RAID and readonly disks', () => {
   const disk = { type: 'disk', name: '/dev/sdb', ro: false, mountpoints: [], children: [] };
   assert.equal(diskReason(disk), null);
@@ -105,6 +121,7 @@ test('Samba enforces account allowlist, read-only members and no symlinks', () =
   const config = sambaConfig([{ name: 'documents', path: '/srv/nexus/data/documents', members: [{ name: 'alice', write: true }, { name: 'bob', write: false }] }]);
   assert.match(config, /valid users = nx_alice nx_bob/); assert.match(config, /write list = nx_alice\n/);
   assert.match(config, /follow symlinks = no/); assert.match(config, /guest ok = no/);
+  assert.match(config, /server min protocol = SMB2/); assert.match(config, /server signing = mandatory/); assert.match(config, /map to guest = Never/);
 });
 test('network enumeration error 97 leaves system metrics available and uses ip fallback', async () => {
   const unavailable = () => { throw new Error('uv_interface_addresses returned Unknown system error 97'); };

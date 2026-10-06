@@ -99,6 +99,9 @@ $ready && systemctl is-active --quiet nexus-agent nexus || { journalctl -u nexus
 echo
 echo 'Nexus est prêt. Ouvrez depuis un ordinateur du même réseau :'
 for address in $(hostname -I); do [[ $address =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo "  http://$address:8080 (redirige vers HTTPS sur 8443)"; done
+echo 'Après avoir créé un partage dans le setup, utilisez son chemin réseau :'
+for address in $(hostname -I); do [[ $address =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && printf '  Windows : \\\\%s\\nom-du-partage\n  Linux/macOS : smb://%s/nom-du-partage\n' "$address" "$address"; done
+echo 'Le setup propose un assistant Windows. Identifiant SMB : nx_<votre compte>, mot de passe Nexus.'
 echo '  https://nexus-nas.local:8443 (après avoir choisi ce nom dans le setup)'
 echo 'Le certificat local est auto-signé : validez son avertissement dans votre navigateur.'
 if [[ -n ${token:-} ]]; then echo "Code de première installation : $token"; else echo 'Compte existant conservé.'; fi

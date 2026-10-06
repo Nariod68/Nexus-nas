@@ -1,4 +1,4 @@
-﻿# Nexus NAS — Linux 0.4.0
+﻿# Nexus NAS — Linux 0.4.1
 
 Nexus transforme un serveur Debian/Ubuntu en NAS administrable depuis un
 navigateur sur le réseau local. La configuration se termine à l'écran : compte
@@ -39,6 +39,15 @@ et OpenSSL. Aucun npm install ni compilation ne sont nécessaires sur le NAS.
 
 ## Fonctions
 
+- Chaque partage propose un chemin Windows complet, un lien SMB Linux/macOS et
+  un assistant Windows `.cmd` qui connecte une lettre de lecteur après saisie du
+  mot de passe Nexus. Il utilise le compte `nx_<utilisateur>` et ne contient aucun
+  mot de passe. L'assistant est proposé à la fin du setup et reste accessible dans
+  Fichiers et Partages réseau. Les clients doivent être sur le même réseau et avoir
+  accès au port TCP 445 ; le compte doit être autorisé pour le partage.
+- Français et anglais sur les pages, formulaires, fenêtres, messages et unités.
+  Navigation dans les dossiers par leur nom, le bouton Ouvrir ou un double-clic,
+  retour au dossier parent et renommage sans écraser les destinations existantes.
 - Interface responsive, thèmes clair et sombre, animations et fenêtres intégrées.
   Le tableau de bord affiche les courbes réelles du processeur et de la mémoire,
   échantillonnées toutes les dix secondes sur dix minutes. Cet historique reste

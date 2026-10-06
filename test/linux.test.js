@@ -30,11 +30,16 @@ test('installed Linux services, HTTPS setup, real Samba and file transfer', { sk
   assert.equal((await request('/api/files/upload?share=citest&path=hello.txt', 'PUT', 'Linux NAS transfer', cookie)).status, 201);
   const folder = await request('/api/files/folder?share=citest&path=photos', 'POST', {}, cookie);
   assert.equal(folder.status, 201, folder.data);
+  assert.equal((await request('/api/files/upload?share=citest&path=photos/nested.txt', 'PUT', 'Nested file', cookie)).status, 201);
+  assert.equal((await request('/api/files/move?share=citest&path=photos', 'POST', { destination: 'albums' }, cookie)).status, 200);
+  const nested = await request('/api/files?share=citest&path=albums', 'GET', undefined, cookie);
+  assert.equal(nested.status, 200, nested.data);
+  assert.match(nested.data, /nested.txt/);
   assert.equal((await request('/api/files/download?share=citest&path=hello.txt', 'GET', undefined, cookie)).data, 'Linux NAS transfer');
   const auth = path.join(os.tmpdir(), 'nexus-smb-test-auth');
   await writeFile(auth, `username = nx_ciadmin\npassword = ${credentials.password}\n`, { mode: 0o600 });
   try {
-    const output = execFileSync('smbclient', ['//127.0.0.1/citest', '-A', auth, '-c', 'ls'], { encoding: 'utf8' }); assert.match(output, /hello.txt/);
+    const output = execFileSync('smbclient', ['//127.0.0.1/citest', '--option=client min protocol=SMB2', '--option=client signing=mandatory', '-A', auth, '-c', 'ls; cd albums; ls'], { encoding: 'utf8' }); assert.match(output, /hello.txt/); assert.match(output, /nested.txt/);
   } finally { await rm(auth, { force: true }); }
 });
 
