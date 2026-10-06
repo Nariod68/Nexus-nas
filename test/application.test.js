@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { createServer } from '../server/main.js';
-import { components, listFiles, uploadFile, downloadFile, trashFile, listTrash, restoreTrash, purgeTrash, moveFile } from '../server/files.js';
+import { components, listFiles, uploadFile, downloadFile, previewFile, trashFile, listTrash, restoreTrash, purgeTrash, moveFile } from '../server/files.js';
 import { diskReason, diskSafetyReason, partitionScript } from '../agent/disks.js';
 import { sambaConfig } from '../agent/main.js';
 import { snapshot, networkInfo } from '../server/system.js';
@@ -41,14 +41,25 @@ test('setup, multiuser sessions, share ACL and file round trip', async t => {
   assert.equal((await request(file, { method: 'PUT', cookie, raw: Buffer.from('overwrite') })).status, 409);
   assert.equal(await (await request('/api/files/download?share=docs&path=hello.txt', { cookie })).text(), 'Bonjour NAS');
   assert.equal((await (await request('/api/files?share=docs', { cookie })).json())[0].name, 'hello.txt');
+  const png = Buffer.from('89504e470d0a1a0a0000000000000000', 'hex');
+  assert.equal((await request('/api/files/upload?share=docs&path=photo.png', { method: 'PUT', cookie, raw: png })).status, 201);
+  const preview = await request('/api/files/preview?share=docs&path=photo.png', { cookie });
+  assert.equal(preview.status, 200); assert.equal(preview.headers.get('content-type'), 'image/png');
+  assert.match(preview.headers.get('content-disposition'), /^inline/);
+  assert.deepEqual(Buffer.from(await preview.arrayBuffer()), png);
+  assert.equal((await request('/api/files/preview?share=docs&path=hello.txt', { cookie })).status, 415);
+  assert.equal((await request('/api/files/preview?share=docs&path=photo.png')).status, 401);
   assert.equal((await request('/api/files?share=docs&path=../', { cookie })).status, 400);
   const bob = await login({ name: 'bob', password: 'bob-has-a-long-password' });
   assert.equal((await request('/api/disks/plan', { method: 'POST', cookie: bob, body: {} })).status, 403);
   assert.equal((await request(file, { method: 'PUT', cookie: bob, raw: Buffer.from('no') })).status, 403);
   assert.equal((await request('/api/files/download?share=docs&path=hello.txt', { cookie: bob })).status, 200);
+  assert.equal((await request('/api/files/preview?share=docs&path=photo.png', { cookie: bob })).status, 200);
   assert.equal((await request('/api/users/disable', { method: 'POST', cookie, body: { name: 'bob' } })).status, 200);
   assert.equal((await request('/api/files?share=docs', { cookie: bob })).status, 401);
+  assert.equal((await request('/api/files/preview?share=docs&path=photo.png', { cookie: bob })).status, 401);
   assert.equal((await request('/api/files?share=docs&path=hello.txt', { method: 'DELETE', cookie })).status, 200);
+  assert.equal((await request('/api/files?share=docs&path=photo.png', { method: 'DELETE', cookie })).status, 200);
   assert.equal((await (await request('/api/files?share=docs', { cookie })).json()).length, 0);
   assert.ok((await readFile(path.join(temp, 'state.json'), 'utf8')).includes('configured'));
 });
@@ -79,6 +90,16 @@ test('directory navigation and rename preserve nested data and reject existing d
   await assert.rejects(moveFile(root, 'albums', 'albums/child'));
   assert.deepEqual((await listFiles(root, 'albums')).map(f => f.name), ['original.txt']);
   await assert.rejects(moveFile(root, 'albums', '../escape'));
+});
+test('image previews identify bytes rather than extensions and refuse SVG and oversized files', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-preview-')); t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'picture.bin'), Buffer.from('89504e470d0a1a0a0000000000000000', 'hex'));
+  const image = await previewFile(root, 'picture.bin'); assert.equal(image.mime, 'image/png'); await image.file.close();
+  await writeFile(path.join(root, 'fake.jpg'), '<svg onload="alert(1)"></svg>');
+  await assert.rejects(previewFile(root, 'fake.jpg'), error => error.status === 415);
+  await assert.rejects(previewFile(root, '../picture.bin'));
+  await writeFile(path.join(root, 'big.png'), Buffer.alloc(16 * 1024 ** 2 + 1));
+  await assert.rejects(previewFile(root, 'big.png'), error => error.status === 415);
 });
 
 test('partition guard protects mounted, swap, RAID and readonly disks', () => {

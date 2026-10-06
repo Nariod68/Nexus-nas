@@ -5,6 +5,7 @@ const paths = {
   useradd: '/usr/sbin/useradd', smbpasswd: '/usr/bin/smbpasswd', testparm: '/usr/bin/testparm',
   systemctl: '/usr/bin/systemctl', systemdRun: '/usr/bin/systemd-run', hostnamectl: '/usr/bin/hostnamectl',
   getent: '/usr/bin/getent', setfacl: '/usr/bin/setfacl', smartctl: '/usr/sbin/smartctl',
+  pdbedit: '/usr/bin/pdbedit',
 };
 export function run(name, args = [], { input, timeout = 30000 } = {}) {
   if (!paths[name]) throw new Error('Commande non autorisée');

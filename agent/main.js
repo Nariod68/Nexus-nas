@@ -91,6 +91,19 @@ async function queueJob(kind, work) {
   return { id };
 }
 export async function dispatch(action, data) {
+  if (action === 'shares.check') {
+    const name = username(data.name), user = username(data.user), state = await store.read();
+    const share = state.shares.find(s => s.name === name); if (!share) throw new Error('Partage introuvable');
+    const checks = [];
+    const check = async (key, work) => { try { checks.push({ key, ok: !!await work() }); } catch { checks.push({ key, ok: false }); } };
+    await check('service', async () => (await run('systemctl', ['is-active', 'smbd'])).trim() === 'active');
+    await check('configuration', async () => { await run('testparm', ['-s']); return true; });
+    await check('account', async () => { const entry = await run('pdbedit', ['-L', '-v', '-u', `nx_${user}`]); return /Unix username:\s+nx_/.test(entry) && !/Account Flags:\s+\[[^\]]*D/.test(entry); });
+    await check('permission', async () => share.members.some(m => m.name === user));
+    await check('volume', async () => (await volumes()).some(v => v.id === share.volume));
+    await check('directory', async () => { const directory = await lstat(share.path); return directory.isDirectory() && !directory.isSymbolicLink(); });
+    return { ready: checks.every(c => c.ok), checks };
+  }
   if (action === 'state') {
     const state = await store.read();
     const diagnostics = [];

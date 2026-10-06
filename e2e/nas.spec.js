@@ -32,8 +32,20 @@ test('browser setup, SMB share, file upload/download, folder, removal and accoun
   await connection.getByRole('button', { name: 'Télécharger l’assistant Windows' }).click();
   const helper = await helperDownload;
   const helperText = await readFile(await helper.path(), 'utf8');
-  expect(helperText).toContain('net use Z: "\\\\127.0.0.1\\documents" * /user:"nx_alice" /persistent:yes');
+  expect(helperText).toContain('powershell.exe');
+  const helperScript = Buffer.from(helperText.split('::NEXUS_PAYLOAD::\r\n')[1].trim(), 'base64').toString('utf16le');
+  expect(helperScript).toContain('WNetAddConnection2');
+  const helperConfig = JSON.parse(Buffer.from(/FromBase64String\('([^']+)'\)/.exec(helperScript)[1], 'base64').toString('utf8'));
+  expect(helperConfig.path).toBe('\\\\127.0.0.1\\documents');
+  expect(helperConfig.account).toBe('nx_alice');
   expect(helperText).not.toContain('browser-admin-password');
+  await expect(connection.locator('.connection-checks')).toContainText('Votre accès NAS est prêt');
+  await connection.getByLabel('Mot de passe Nexus', { exact: true }).fill('wrong-password');
+  await connection.getByRole('button', { name: 'Réparer mon accès', exact: true }).click();
+  await expect(connection.getByRole('alert')).toContainText('Mot de passe actuel incorrect');
+  await connection.getByLabel('Mot de passe Nexus', { exact: true }).fill('browser-admin-password');
+  await connection.getByRole('button', { name: 'Réparer mon accès', exact: true }).click();
+  await expect(connection.getByLabel('Mot de passe Nexus', { exact: true })).toHaveValue('');
   await connection.getByRole('button', { name: 'Fermer' }).click();
   await expect(page.getByRole('heading', { name: 'Fichiers', exact: true })).toBeVisible();
   await expect(page.locator('.app-shell')).not.toContainText('Mode démonstration');
@@ -110,6 +122,14 @@ test('browser setup, SMB share, file upload/download, folder, removal and accoun
   await page.locator('#file-search').fill('absent');
   await expect(page.locator('#file-rows')).toContainText('Aucun résultat');
   await page.locator('#file-search').fill('');
+  const png = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAusB9Wl6fZsAAAAASUVORK5CYII=', 'base64');
+  await page.locator('#file-upload').setInputFiles([{ name: 'preview.png', mimeType: 'image/png', buffer: png }, { name: 'broken.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('not an image') }]);
+  await expect(page.locator('[data-preview="preview.png"]')).toHaveClass(/is-loaded/);
+  await expect(page.locator('[data-preview="broken.jpg"] img')).toHaveCount(0);
+  await expect(page.locator('[data-preview="broken.jpg"] .ui-icon')).toBeVisible();
+  await page.locator('[data-preview="preview.png"]').click();
+  await expect(page.getByRole('dialog').locator('.image-viewer img')).toBeVisible();
+  await page.getByRole('dialog').getByRole('button', { name: 'Fermer' }).click();
   await page.unroute('**/api/system');
   // Historical fixture used only for visual/interaction checks; production
   // charts consume the server's real MetricsCollector samples.

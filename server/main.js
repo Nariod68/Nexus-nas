@@ -9,7 +9,7 @@ import { snapshot, MetricsCollector } from './system.js';
 import { latestRelease, newer, repository } from './releases.js';
 import { Store, passwordHash, passwordMatches, username } from './store.js';
 import { agentClient } from './agent-client.js';
-import { listFiles, downloadFile, uploadFile, makeDirectory, trashFile, moveFile, listTrash, restoreTrash, purgeTrash } from './files.js';
+import { listFiles, downloadFile, previewFile, uploadFile, makeDirectory, trashFile, moveFile, listTrash, restoreTrash, purgeTrash } from './files.js';
 
 const root = new URL('../', import.meta.url);
 const pkg = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
@@ -124,6 +124,19 @@ export function createServer({ password, setupToken, statePath, storagePath = '/
         if (route === '/api/shares' && req.method === 'GET') {
           const info = await agent('state'); return send(200, info.shares.filter(s => user.role === 'admin' || s.members.some(m => m.name === user.name)).map(s => ({ ...s, writable: user.role === 'admin' || s.members.some(m => m.name === user.name && m.write) })));
         }
+        if (['/api/shares/check', '/api/shares/repair'].includes(route) && req.method === 'POST') {
+          const input = await jsonBody(req), info = await agent('state');
+          const share = info.shares.find(s => s.name === input.name);
+          if (!share || (user.role !== 'admin' && !share.members.some(m => m.name === user.name))) fail(403, 'Accès au partage refusé');
+          if (route === '/api/shares/check') return send(200, await agent('shares.check', { name: share.name, user: user.name }));
+          rateLimit(req.socket.remoteAddress);
+          if (!await passwordMatches(input.password, user.hash)) fail(403, 'Mot de passe actuel incorrect');
+          await agent('users.save', { name: user.name, password: input.password });
+          const members = share.members.some(m => m.name === user.name) ? share.members : [...share.members, { name: user.name, write: true }];
+          await agent('shares.save', { name: share.name, volume: share.volume, members });
+          attempts.delete(req.socket.remoteAddress);
+          return send(200, await agent('shares.check', { name: share.name, user: user.name }));
+        }
         if (route.startsWith('/api/files')) {
           const info = await agent('state'), share = info.shares.find(s => s.name === url.searchParams.get('share'));
           if (!share || (user.role !== 'admin' && !share.members.some(m => m.name === user.name))) fail(403, 'Accès au partage refusé');
@@ -134,9 +147,11 @@ export function createServer({ password, setupToken, statePath, storagePath = '/
           if (route === '/api/files/restore' && req.method === 'POST') { writable(); const input = await jsonBody(req); await restoreTrash(share.path, input.id, input.destination); return send(200, { ok: true }); }
           if (route === '/api/files/purge' && req.method === 'POST') { writable(); const input = await jsonBody(req); await purgeTrash(share.path, input.confirmation); return send(200, { ok: true }); }
           if (route === '/api/files' && req.method === 'GET') return send(200, await listFiles(share.path, relative));
-          if (route === '/api/files/download' && req.method === 'GET') {
-            const data = await downloadFile(share.path, relative);
-            res.writeHead(200, { 'Content-Type': 'application/octet-stream', 'Content-Length': data.size, 'Content-Disposition': `attachment; filename*=UTF-8''${encodeURIComponent(data.name)}` });
+          if (['/api/files/download', '/api/files/preview'].includes(route) && req.method === 'GET') {
+            const preview = route === '/api/files/preview';
+            const data = await (preview ? previewFile : downloadFile)(share.path, relative);
+            if (preview) res.setHeader('Content-Security-Policy', "default-src 'none'; sandbox");
+            res.writeHead(200, { 'Content-Type': preview ? data.mime : 'application/octet-stream', 'Content-Length': data.size, 'Content-Disposition': `${preview ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(data.name)}` });
             await pipeline(data.file.createReadStream(), res); return;
           }
           if (route === '/api/files/upload' && req.method === 'PUT') { writable(); req.setTimeout(60000); return send(201, await uploadFile(share.path, relative, req, maximumUpload)); }

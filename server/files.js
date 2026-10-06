@@ -55,6 +55,22 @@ export async function downloadFile(root, relative) {
     return { file, name: dir.name, size: info.size };
   } finally { await dir.close(); }
 }
+export async function previewFile(root, relative) {
+  const data = await downloadFile(root, relative);
+  try {
+    if (data.size > 16 * 1024 ** 2) throw new Error('Aperçu trop volumineux');
+    const header = Buffer.alloc(32); await data.file.read(header, 0, header.length, 0);
+    const hex = header.toString('hex'), ascii = header.toString('ascii');
+    const mime = hex.startsWith('89504e470d0a1a0a') ? 'image/png'
+      : hex.startsWith('ffd8ff') ? 'image/jpeg'
+      : ascii.startsWith('GIF87a') || ascii.startsWith('GIF89a') ? 'image/gif'
+      : ascii.startsWith('RIFF') && ascii.slice(8, 12) === 'WEBP' ? 'image/webp'
+      : ascii.startsWith('BM') ? 'image/bmp'
+      : ascii.slice(4, 8) === 'ftyp' && /avif|avis/.test(ascii.slice(8)) ? 'image/avif' : null;
+    if (!mime) throw new Error('Aperçu indisponible');
+    return { ...data, mime };
+  } catch (error) { await data.file.close(); error.status = 415; throw error; }
+}
 export async function uploadFile(root, relative, input, maximum = 50 * 1024 ** 3) {
   const dir = await parent(root, relative);
   const temp = path.join(dir.path, `.nexus-upload-${randomBytes(16).toString('hex')}`);

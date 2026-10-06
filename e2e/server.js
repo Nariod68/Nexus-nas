@@ -6,6 +6,7 @@ const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-browser-'));
 const data = { shares: [], users: [], volumes: [{ id: 'system', name: 'Stockage système', path: root }], disks: [{ name: '/dev/testdisk', size: 8 * 1024 ** 3, model: 'Disque de test', canPartition: true }], jobs: [] };
 const agent = async (action, value) => {
   if (action === 'state') return data;
+  if (action === 'shares.check') return { ready: true, checks: ['service', 'configuration', 'account', 'permission', 'volume', 'directory'].map(key => ({ key, ok: true })) };
   if (action === 'users.save') { data.users.push(value.name); return { ok: true }; }
   if (action === 'hostname' || action === 'users.disable') return { ok: true };
   if (action === 'shares.save') { const directory = path.join(root, value.name); await mkdir(directory, { recursive: true }); data.shares = [...data.shares.filter(s => s.name !== value.name), { ...value, path: directory }]; return { ok: true }; }

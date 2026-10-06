@@ -232,6 +232,17 @@ button.file-name { cursor: pointer; text-decoration: underline; text-decoration-
 .connection-guide summary { cursor: pointer; font-weight: 600; }
 .connection-guide input[readonly] { font-family: ui-monospace, monospace; font-size: 12px; }
 .file-table tr[data-directory] { cursor: pointer; }
+.preview-button { position: relative; width: 54px; height: 44px; padding: 0; border: 1px solid var(--line); cursor: pointer; overflow: hidden; flex-shrink: 0; }
+.preview-button img { position: absolute; inset: 0; opacity: 0; width: 100%; height: 100%; object-fit: cover; }
+.preview-button.is-loaded img { opacity: 1; }
+.preview-button:hover { transform: scale(1.08); border-color: var(--accent); }
+.image-viewer { margin: 20px 0 0; text-align: center; }
+.image-viewer img { max-width: 100%; max-height: 70vh; object-fit: contain; border-radius: 10px; }
+.image-viewer figcaption { margin-top: 12px; overflow-wrap: anywhere; color: var(--muted); font-size: 12px; }
+.connection-checks { padding: 15px; border: 1px solid var(--line); border-radius: 12px; }
+.connection-checks p { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 12px; }
+.connection-repair { border-top: 1px solid var(--line); padding-top: 18px; }
+@media (max-width: 760px) { .preview-button { width: 40px; height: 36px; } }
 .file-size, .file-date { color: var(--muted); font-size: 10px; white-space: nowrap; }
 .table-actions { display: flex; justify-content: flex-end; align-items: center; gap: 5px; }
 .action-button { display: inline-flex; align-items: center; justify-content: center; gap: 5px; min-height: 32px; border: 1px solid transparent; border-radius: 8px; padding: 7px 9px; background: transparent; color: var(--muted); font-size: 9px; font-weight: 550; white-space: nowrap; transition: background .2s, color .2s, transform .2s; }
