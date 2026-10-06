@@ -1,6 +1,7 @@
 import { readFile, writeFile, mkdir, realpath, symlink, rename, unlink, open, copyFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { latestRelease, newer, repository } from '../server/releases.js';
 import { validateBundle } from './bundle.js';
 
@@ -38,6 +39,18 @@ async function healthy(version) {
   }
   return false;
 }
+const restart = () => execFileSync('systemctl', ['restart', 'nexus-agent', 'nexus']);
+export async function activateVersion(target, previous, version, { switcher = switchTo, deployer = deployUnits, restarter = restart, verifier = healthy, notifier = report } = {}) {
+  await switcher(target);
+  try {
+    await notifier('running', 'Redémarrage sur la nouvelle version');
+    await deployer(target); await restarter();
+    if (!await verifier(version)) throw new Error('La nouvelle version ne répond pas');
+  } catch (error) {
+    await switcher(previous); await deployer(previous); await restarter();
+    throw new Error(`${error.message}. Version précédente restaurée.`);
+  }
+}
 async function main() {
   if (process.platform !== 'linux' || process.getuid() !== 0) throw new Error('Exécuter cette commande avec sudo sur le serveur Linux');
   if (process.argv.slice(2).some(arg => arg !== '--rollback')) throw new Error('Option inconnue');
@@ -52,6 +65,7 @@ async function main() {
       target = (await readFile(`${base}/previous`, 'utf8')).trim();
       if (!target.startsWith(`${base}/releases/`) || await realpath(target) !== target) throw new Error('Sauvegarde invalide');
       version = JSON.parse(await readFile(path.join(target, 'package.json'))).version;
+      await readFile(path.join(target, 'deploy/nexus-agent.service')).catch(() => { throw new Error('La version précédente est incompatible avec la génération Nexus 0.3'); });
     } else {
       const release = await latestRelease();
       if (!newer(release.tag_name, installed)) { await report('success', 'Nexus est à jour'); console.log('Nexus est à jour'); return; }
@@ -73,19 +87,12 @@ async function main() {
       execFileSync(process.execPath, ['--check', path.join(target, 'agent/main.js')]);
     }
     await writeFile(`${base}/previous`, previous, { mode: 0o600 });
-    await switchTo(target);
-    try {
-      await report('running', 'Redémarrage sur la nouvelle version');
-      await deployUnits(target);
-      execFileSync('systemctl', ['restart', 'nexus-agent', 'nexus']);
-      if (!await healthy(version)) throw new Error('La nouvelle version ne répond pas');
-      execFileSync('systemctl', ['is-active', '--quiet', 'nexus-agent']);
-    } catch (error) {
-      await switchTo(previous); await deployUnits(previous); execFileSync('systemctl', ['restart', 'nexus-agent', 'nexus']);
-      throw new Error(`${error.message}. Version précédente restaurée.`);
-    }
+    await activateVersion(target, previous, version, { verifier: async current => {
+      if (!await healthy(current)) return false;
+      execFileSync('systemctl', ['is-active', '--quiet', 'nexus-agent']); return true;
+    } });
     await report('success', `Nexus ${version} installé`);
     console.log(`Nexus ${version} installé. Configuration conservée dans /etc/nexus.`);
   } finally { await lock.close(); await unlink(`${base}/.update-lock`); }
 }
-main().catch(async error => { await report('failed', error.message).catch(() => {}); console.error(error.message); process.exitCode = 1; });
+if (process.argv[1] && await realpath(process.argv[1]).catch(() => '') === fileURLToPath(import.meta.url)) main().catch(async error => { await report('failed', error.message).catch(() => {}); console.error(error.message); process.exitCode = 1; });

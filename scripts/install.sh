@@ -68,6 +68,7 @@ if [[ ! -f /etc/nexus/server.key ]]; then
   openssl req -x509 -newkey rsa:3072 -sha256 -days 825 -nodes -keyout /etc/nexus/server.key -out /etc/nexus/server.crt -subj '/CN=Nexus NAS' -addext "subjectAltName=$san" >/dev/null 2>&1
   chown root:nexus /etc/nexus/server.key
   chmod 640 /etc/nexus/server.key
+  chmod 644 /etc/nexus/server.crt
 fi
 touch /etc/samba/nexus-shares.conf
 if ! grep -q '/etc/samba/nexus-shares.conf' /etc/samba/smb.conf; then
@@ -86,8 +87,12 @@ if command -v ufw >/dev/null && ufw status | grep -q 'Status: active'; then
     for port in 8080 8443 445; do ufw allow from "$network" to any port "$port" proto tcp >/dev/null; done
   done
 fi
-sleep 2
-systemctl is-active --quiet nexus-agent nexus || { journalctl -u nexus -u nexus-agent -n 30 --no-pager; exit 1; }
+ready=false
+for attempt in {1..30}; do
+  if curl --silent --fail --cacert /etc/nexus/server.crt https://127.0.0.1:8443/api/health >/dev/null || curl --silent --fail http://127.0.0.1:8080/api/health >/dev/null; then ready=true; break; fi
+  sleep 1
+done
+$ready && systemctl is-active --quiet nexus-agent nexus || { journalctl -u nexus -u nexus-agent -n 30 --no-pager; exit 1; }
 echo
 echo 'Nexus est prêt. Ouvrez depuis un ordinateur du même réseau :'
 for address in $(hostname -I); do [[ $address =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]] && echo "  http://$address:8080 (redirige vers HTTPS sur 8443)"; done

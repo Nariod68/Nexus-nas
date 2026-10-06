@@ -6,7 +6,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { Readable } from 'node:stream';
 import { createServer } from '../server/main.js';
-import { components, listFiles, uploadFile, downloadFile, trashFile } from '../server/files.js';
+import { components, listFiles, uploadFile, downloadFile, trashFile, listTrash, restoreTrash, purgeTrash } from '../server/files.js';
 import { diskReason, partitionScript } from '../agent/disks.js';
 import { sambaConfig } from '../agent/main.js';
 
@@ -74,6 +74,20 @@ test('partition guard protects mounted, swap, RAID and readonly disks', () => {
   assert.throws(() => partitionScript([{ label: 'bad\nlabel', sizeGiB: null }], 4e9));
   assert.throws(() => partitionScript([{ label: 'data', sizeGiB: 10 }], 4e9));
   assert.match(partitionScript([{ label: 'data', sizeGiB: null }], 4e9), /label: gpt/);
+});
+test('trash restoration and permanent purge preserve existing destinations', async t => {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'nexus-trash-')); t.after(() => rm(root, { recursive: true, force: true }));
+  await writeFile(path.join(root, 'original'), 'original bytes'); await trashFile(root, 'original');
+  const record = (await listTrash(root))[0]; assert.equal(record.original, 'original');
+  await writeFile(path.join(root, 'original'), 'new bytes');
+  await assert.rejects(restoreTrash(root, record.id), { code: 'EEXIST' });
+  await restoreTrash(root, record.id, 'restored'); assert.equal(await readFile(path.join(root, 'restored'), 'utf8'), 'original bytes');
+  await trashFile(root, 'restored'); await assert.rejects(purgeTrash(root, 'no'), /Confirmation/);
+  await purgeTrash(root, 'VIDER LA CORBEILLE'); assert.deepEqual(await listTrash(root), []);
+  if (process.platform === 'linux') {
+    await mkdir(path.join(root, 'folder')); await writeFile(path.join(root, 'folder', 'child'), 'data'); await trashFile(root, 'folder');
+    await restoreTrash(root, (await listTrash(root))[0].id); assert.equal(await readFile(path.join(root, 'folder', 'child'), 'utf8'), 'data');
+  }
 });
 test('Samba enforces account allowlist, read-only members and no symlinks', () => {
   const config = sambaConfig([{ name: 'documents', path: '/srv/nexus/data/documents', members: [{ name: 'alice', write: true }, { name: 'bob', write: false }] }]);

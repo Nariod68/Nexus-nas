@@ -74,7 +74,12 @@ async function userAction(data) {
 }
 async function queueJob(kind, work) {
   const id = randomUUID();
-  await store.change(state => { if (state.jobs.some(j => j.status === 'running')) throw new Error('Une opération système est déjà en cours'); state.jobs = [...state.jobs.slice(-49), { id, kind, status: 'running', message: 'Préparation', time: new Date().toISOString() }]; });
+  await store.change(async state => {
+    const update = await readFile('/var/lib/nexus-agent/update-status.json', 'utf8').then(JSON.parse).catch(() => null);
+    if (update?.status === 'running' && Date.now() - Date.parse(update.time) < 15 * 60000) throw new Error('Une mise à jour est en cours');
+    if (state.jobs.some(j => j.status === 'running')) throw new Error('Une opération système est déjà en cours');
+    state.jobs = [...state.jobs.slice(-49), { id, kind, status: 'running', message: 'Préparation', time: new Date().toISOString() }];
+  });
   setImmediate(async () => {
     const progress = async message => store.change(state => { const j = state.jobs.find(j => j.id === id); j.message = message; });
     try {
@@ -103,10 +108,13 @@ export async function dispatch(action, data) {
     await run('hostnamectl', ['set-hostname', data.name]); return { ok: true };
   }
   if (action === 'updates.install' || action === 'updates.rollback') {
-    const status = await readFile('/var/lib/nexus-agent/update-status.json', 'utf8').then(JSON.parse).catch(() => null);
-    if (status?.status === 'running' && Date.now() - Date.parse(status.time) < 15 * 60000) throw new Error('Une mise à jour est en cours');
     const id = randomUUID();
-    await writeFile('/var/lib/nexus-agent/update-status.json', JSON.stringify({ id, status: 'running', time: new Date().toISOString(), message: 'Démarrage' }), { mode: 0o600 });
+    await store.change(async state => {
+      if (state.jobs.some(j => j.status === 'running')) throw new Error('Attendre la fin de l’opération disque avant de mettre à jour');
+      const status = await readFile('/var/lib/nexus-agent/update-status.json', 'utf8').then(JSON.parse).catch(() => null);
+      if (status?.status === 'running' && Date.now() - Date.parse(status.time) < 15 * 60000) throw new Error('Une mise à jour est en cours');
+      await writeFile('/var/lib/nexus-agent/update-status.json', JSON.stringify({ id, status: 'running', time: new Date().toISOString(), message: 'Démarrage' }), { mode: 0o600 });
+    });
     try { await run('systemdRun', ['--unit', `nexus-update-${id}`, '--collect', '--property=Type=exec', process.execPath, '/opt/nexus/current/scripts/update.js', ...(action === 'updates.rollback' ? ['--rollback'] : [])]); }
     catch (error) { await writeFile('/var/lib/nexus-agent/update-status.json', JSON.stringify({ id, status: 'failed', message: error.message }), { mode: 0o600 }); throw error; }
     return { id };
