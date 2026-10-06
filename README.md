@@ -1,4 +1,4 @@
-﻿# Nexus NAS — Linux 0.3.3
+﻿# Nexus NAS — Linux 0.3.4
 
 Nexus transforme un serveur Debian/Ubuntu en NAS administrable depuis un
 navigateur sur le réseau local. La configuration se termine à l'écran : compte

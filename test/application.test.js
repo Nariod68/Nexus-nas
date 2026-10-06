@@ -7,7 +7,7 @@ import path from 'node:path';
 import { Readable } from 'node:stream';
 import { createServer } from '../server/main.js';
 import { components, listFiles, uploadFile, downloadFile, trashFile, listTrash, restoreTrash, purgeTrash } from '../server/files.js';
-import { diskReason, partitionScript } from '../agent/disks.js';
+import { diskReason, diskSafetyReason, partitionScript } from '../agent/disks.js';
 import { sambaConfig } from '../agent/main.js';
 
 test('setup, multiuser sessions, share ACL and file round trip', async t => {
@@ -88,6 +88,17 @@ test('trash restoration and permanent purge preserve existing destinations', asy
     await mkdir(path.join(root, 'folder')); await writeFile(path.join(root, 'folder', 'child'), 'data'); await trashFile(root, 'folder');
     await restoreTrash(root, (await listTrash(root))[0].id); assert.equal(await readFile(path.join(root, 'folder', 'child'), 'utf8'), 'data');
   }
+});
+test('missing kernel metadata cannot mask protection of a mounted system disk', async () => {
+  let probes = 0;
+  const unavailable = async () => { probes++; throw new Error('ENOENT'); };
+  const disk = { name: '/dev/sda', type: 'disk', ro: false, children: [{ name: '/dev/sda1', type: 'part', mountpoints: ['/'] }] };
+  assert.match(await diskSafetyReason(disk, [], unavailable), /partition est montée/);
+  assert.equal(probes, 0);
+  const unused = { name: '/dev/sdb', type: 'disk', ro: false, children: [] };
+  assert.match(await diskSafetyReason(unused, [], unavailable), /Impossible de vérifier/);
+  assert.match(await diskSafetyReason(unused, [], async () => ['dm-0']), /autre périphérique/);
+  assert.equal(await diskSafetyReason(unused, [], async () => []), null);
 });
 test('Samba enforces account allowlist, read-only members and no symlinks', () => {
   const config = sambaConfig([{ name: 'documents', path: '/srv/nexus/data/documents', members: [{ name: 'alice', write: true }, { name: 'bob', write: false }] }]);

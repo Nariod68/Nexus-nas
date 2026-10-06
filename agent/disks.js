@@ -14,6 +14,24 @@ export function diskReason(disk, swaps = []) {
   }
   return null;
 }
+async function kernelHolders(device) {
+  const identity = device['maj:min'];
+  if (typeof identity === 'string' && /^\d+:\d+$/.test(identity)) return readdir(`/sys/dev/block/${identity}/holders`);
+  const name = path.basename(device.name || '');
+  if (!/^[a-zA-Z0-9_-]+$/.test(name)) throw new Error('Identité de périphérique invalide');
+  return readdir(`/sys/class/block/${name}/holders`);
+}
+export async function diskSafetyReason(disk, swaps = [], holders = kernelHolders) {
+  const reason = diskReason(disk, swaps);
+  // A confirmed mounted/system/swap/RAID disk must keep its explicit reason.
+  // Additional unavailable kernel metadata cannot change that conclusion.
+  if (reason) return reason;
+  for (const device of walk(disk)) {
+    try { if ((await holders(device)).length) return 'Disque utilisé par un autre périphérique'; }
+    catch { return 'Impossible de vérifier l’utilisation de ce disque dans le noyau'; }
+  }
+  return null;
+}
 export function partitionScript(parts, capacity) {
   if (!Array.isArray(parts) || parts.length < 1 || parts.length > 16) throw new Error('Prévoir entre 1 et 16 partitions');
   let allocated = 0;
@@ -34,12 +52,7 @@ export class Disks {
     const parsed = JSON.parse(await this.run('lsblk', ['--json', '--bytes', '--paths', '--output', 'NAME,SIZE,TYPE,MODEL,SERIAL,RO,MOUNTPOINTS,FSTYPE,MAJ:MIN']));
     const swaps = (await readFile('/proc/swaps', 'utf8')).split('\n').slice(1).map(line => line.split(/\s+/)[0]);
     return Promise.all(parsed.blockdevices.filter(d => d.type === 'disk' || (process.env.NEXUS_TEST_DISKS === '1' && d.type === 'loop')).map(async disk => {
-      let reason = diskReason(disk, swaps);
-      for (const child of walk(disk)) {
-        // Fail closed if the kernel holders cannot be inspected.
-        try { if ((await readdir(`/sys/class/block/${path.basename(child.name)}/holders`)).length) reason = 'Disque utilisé par un autre périphérique'; }
-        catch { reason = 'Impossible de vérifier l’utilisation de ce disque dans le noyau'; }
-      }
+      const reason = await diskSafetyReason(disk, swaps);
       return { ...disk, reason, canPartition: !reason, fingerprint: fingerprint(disk) };
     }));
   }
