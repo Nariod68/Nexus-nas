@@ -4,9 +4,14 @@ import { readFile } from 'node:fs/promises';
 test('browser setup, SMB share, file upload/download, folder, removal and account', async ({ page }) => {
   const errors = []; page.on('pageerror', e => errors.push(e.message));
   let agentRequests = 0;
+  let diskUnavailable = false;
   await page.route('**/api/agent', async route => {
     if (++agentRequests === 1) await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: 'Service Linux temporairement indisponible (test)' }) });
-    else await route.continue();
+    else if (diskUnavailable) {
+      const response = await route.fetch(); const data = await response.json();
+      data.disks = data.disks.map(d => ({ ...d, canPartition: false, reason: 'Disque utilisé : une partition est montée' }));
+      await route.fulfill({ response, json: data });
+    } else await route.continue();
   });
   await page.goto('/');
   await expect(page.getByRole('heading', { name: 'Installer votre NAS' })).toBeVisible();
@@ -35,9 +40,19 @@ test('browser setup, SMB share, file upload/download, folder, removal and accoun
   const userDialog = page.getByRole('dialog'); await userDialog.getByLabel('Nom', { exact: true }).fill('bob'); await userDialog.getByLabel('Mot de passe', { exact: true }).fill('bob-browser-password'); await userDialog.getByRole('button', { name: 'Créer le compte' }).click();
   await expect(page.locator('#page-users')).toContainText('bob');
   await page.locator('[data-page=storage]').click(); await page.getByRole('button', { name: 'Partitionner…' }).click();
-  const partition = page.getByRole('dialog'); await partition.getByRole('button', { name: 'Préparer le plan' }).click();
+  const partition = page.getByRole('dialog');
+  await page.evaluate(() => document.documentElement.dataset.theme = 'dark');
+  await page.screenshot({ path: test.info().outputPath('disk-selector.png') });
+  await partition.getByRole('button', { name: 'Préparer le plan' }).click();
   await expect(partition).toContainText('EFFACER /dev/testdisk');
   await partition.getByRole('button', { name: 'Fermer' }).click();
+  diskUnavailable = true;
+  await page.getByRole('button', { name: 'Partitionner…' }).click();
+  await expect(page.getByRole('dialog')).toContainText('Aucun disque disponible pour le partitionnement');
+  await expect(page.getByRole('dialog').locator('select')).toHaveCount(0);
+  await expect(page.getByRole('dialog')).toContainText('une partition est montée');
+  await page.screenshot({ path: test.info().outputPath('disk-unavailable.png') });
+  await page.getByRole('dialog').getByRole('button', { name: 'Fermer' }).click();
   await page.setViewportSize({ width: 390, height: 844 });
   await page.locator('[data-page=files]').click();
   await expect(page.getByRole('heading', { name: 'Fichiers', exact: true })).toBeVisible();

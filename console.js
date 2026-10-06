@@ -107,6 +107,10 @@ if (location.protocol !== 'file:') {
   async function diskDialog(selected) {
     info = await api('/api/agent');
     const available = info.disks.filter(d => d.canPartition);
+    if (!available.length) {
+      modal(`<section class="console-form"><h2>Préparer un disque</h2><div class="disk-unavailable" role="status"><strong>Aucun disque disponible pour le partitionnement</strong><p>Le disque système et les disques actuellement utilisés sont protégés. Vous pouvez continuer avec le stockage système ou ajouter un disque inutilisé au serveur.</p></div>${info.disks.length ? `<div class="disk-detection-list">${info.disks.map(d => `<p><strong>${E(d.name)}</strong><br><span>${E(d.reason || 'Disque indisponible')}</span></p>`).join('')}</div>` : ''}${(info.diagnostics || []).map(d => `<p role="alert">${E(d)}</p>`).join('')}</section>`);
+      return;
+    }
     const dialog = modal(`<form class="console-form"><h2>Préparer un disque</h2><p class="destructive-warning">Cette opération détruit toutes les partitions et tous les fichiers du disque choisi.</p><label>Disque<select name="device" required>${available.map(d => `<option value="${E(d.name)}" ${d.name === selected ? 'selected' : ''}>${E(d.name)} · ${bytes(d.size)} · ${E(d.model)}</option>`).join('')}</select></label><label>Partitions (une par ligne : label, taille en Gio ; * pour l’espace restant)<textarea name="partitions" required rows="4">donnees,*</textarea></label><button type="submit" class="primary-button" ${available.length ? '' : 'disabled'}>Préparer le plan</button><p role="alert"></p></form>`);
     formSubmit(dialog.querySelector('form'), async values => {
       const partitions = values.partitions.split('\n').filter(Boolean).map(line => { const [label, size] = line.split(',').map(p => p.trim()); return { label, sizeGiB: size === '*' ? null : Number(size) }; });
