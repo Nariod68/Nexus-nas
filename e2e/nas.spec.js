@@ -39,10 +39,46 @@ test('browser setup, SMB share, file upload/download, folder, removal and accoun
   {
     const file = await download; expect(await readFile(await file.path(), 'utf8')).toBe('Bonjour le NAS');
   }
-  page.once('dialog', dialog => dialog.accept('photos')); await page.getByRole('button', { name: 'Nouveau dossier' }).click();
+  await page.getByRole('button', { name: 'Nouveau dossier' }).click();
+  await page.getByRole('dialog').getByRole('textbox').fill('photos');
+  await page.getByRole('dialog').getByRole('button', { name: 'Continuer' }).click();
   await expect(page.locator('#file-rows')).toContainText('photos');
-  page.once('dialog', dialog => dialog.accept()); await page.locator('tr').filter({ hasText: 'hello.txt' }).getByRole('button', { name: 'Retirer' }).click();
+  await page.locator('tr').filter({ hasText: 'hello.txt' }).getByRole('button', { name: 'Retirer' }).click();
+  await page.getByRole('dialog').getByRole('button', { name: 'Confirmer' }).click();
   await expect(page.locator('#file-rows')).not.toContainText('hello.txt');
+  await page.locator('#file-search').fill('photos');
+  await expect(page.locator('#file-rows')).toContainText('photos');
+  await page.locator('#file-search').fill('absent');
+  await expect(page.locator('#file-rows')).toContainText('Aucun résultat');
+  await page.locator('#file-search').fill('');
+  await page.unroute('**/api/system');
+  // Historical fixture used only for visual/interaction checks; production
+  // charts consume the server's real MetricsCollector samples.
+  await page.route('**/api/system', async route => {
+    const response = await route.fetch(); const data = await response.json();
+    const now = Date.now();
+    data.history = Array.from({ length: 60 }, (_, i) => ({ time: new Date(now - (59 - i) * 10000).toISOString(), cpu: Math.round(15 + Math.abs(Math.sin(i / 5)) * 25 + Math.abs(Math.sin(i / 2)) * 8), memory: Math.round(34 + Math.sin(i / 9) * 5) }));
+    data.cpuPercent = data.history.at(-1).cpu; data.memory = { total: 16 * 1024 ** 3, available: 16 * 1024 ** 3 * (1 - data.history.at(-1).memory / 100) };
+    await route.fulfill({ response, json: data });
+  });
+  await page.locator('[data-page=dashboard]').click();
+  await page.getByRole('button', { name: 'Actualiser', exact: true }).click();
+  await expect(page.locator('.chart-line').first()).toHaveAttribute('d', /L/);
+  await expect(page.locator('#uptime-value')).toContainText('min');
+  await expect(page.locator('#uptime-value')).toContainText(' s');
+  const firstUptime = await page.locator('#uptime-value').textContent();
+  await expect.poll(() => page.locator('#uptime-value').textContent()).not.toBe(firstUptime);
+  await page.locator('[data-chart=cpu] .chart-plot').hover();
+  await expect(page.locator('[data-chart=cpu] .chart-tooltip')).toBeVisible();
+  await page.evaluate(() => document.documentElement.dataset.theme = 'dark');
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: test.info().outputPath('dashboard-dark.png'), fullPage: true, animations: 'disabled' });
+  await page.evaluate(() => document.documentElement.dataset.theme = 'light');
+  await page.screenshot({ path: test.info().outputPath('dashboard-light.png'), fullPage: true, animations: 'disabled' });
+  await page.evaluate(() => document.documentElement.dataset.theme = 'dark');
+  await page.locator('[data-page=files]').click();
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.screenshot({ path: test.info().outputPath('files-dark.png'), fullPage: true, animations: 'disabled' });
   await page.locator('[data-page=users]').click(); await page.getByRole('button', { name: 'Ajouter un utilisateur' }).click();
   const userDialog = page.getByRole('dialog'); await userDialog.getByLabel('Nom', { exact: true }).fill('bob'); await userDialog.getByLabel('Mot de passe', { exact: true }).fill('bob-browser-password'); await userDialog.getByRole('button', { name: 'Créer le compte' }).click();
   await expect(page.locator('#page-users')).toContainText('bob');
@@ -64,6 +100,7 @@ test('browser setup, SMB share, file upload/download, folder, removal and accoun
   await page.locator('[data-page=files]').click();
   await expect(page.getByRole('heading', { name: 'Fichiers', exact: true })).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth + 1)).toBeTruthy();
+  await page.screenshot({ path: test.info().outputPath('files-mobile.png'), fullPage: true, animations: 'disabled' });
   await page.getByRole('button', { name: 'Déconnexion' }).click();
   await expect(page.getByRole('heading', { name: 'Bienvenue sur Nexus' })).toBeVisible();
   await page.getByLabel('Nom d’utilisateur', { exact: true }).fill('bob'); await page.getByLabel('Mot de passe', { exact: true }).fill('bob-browser-password');

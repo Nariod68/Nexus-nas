@@ -31,6 +31,32 @@ function cpuSample() {
   return os.cpus().reduce((sum, cpu) => ({ idle: sum.idle + cpu.times.idle, total: sum.total + Object.values(cpu.times).reduce((a, b) => a + b, 0) }), { idle: 0, total: 0 });
 }
 let previous = cpuSample();
+export class MetricsCollector {
+  constructor({ sampler = snapshot, intervalMs = 10000, limit = 60 } = {}) {
+    this.sampler = sampler; this.intervalMs = intervalMs; this.limit = limit; this.history = []; this.latest = null; this.pending = null;
+  }
+  async sample() {
+    if (this.pending) return this.pending;
+    this.pending = (async () => {
+      const data = await this.sampler(); this.latest = data;
+      const memoryPercent = data.memory?.total && data.memory.available != null ? Math.round(100 * (1 - data.memory.available / data.memory.total)) : null;
+      this.history.push({ time: data.sampledAt, cpu: data.cpuPercent, memory: memoryPercent });
+      this.history = this.history.slice(-this.limit);
+      return data;
+    })();
+    try { return await this.pending; } finally { this.pending = null; }
+  }
+  start() {
+    if (this.timer) return;
+    this.sample().catch(() => {});
+    this.timer = setInterval(() => this.sample().catch(() => {}), this.intervalMs).unref();
+  }
+  stop() { clearInterval(this.timer); this.timer = null; }
+  async get() {
+    if (!this.latest) await this.sample();
+    return { ...this.latest, history: [...this.history], sampleIntervalSeconds: this.intervalMs / 1000 };
+  }
+}
 export async function networkInfo(getter = os.networkInterfaces, lookup = command) {
   try {
     return { network: Object.entries(getter()).flatMap(([name, entries]) => (entries || []).filter(e => !e.internal && (e.family === 'IPv4' || e.family === 4)).map(e => ({ name, address: e.address }))), diagnostics: [] };

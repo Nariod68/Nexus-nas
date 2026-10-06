@@ -1,4 +1,4 @@
-﻿# Nexus NAS — Linux 0.3.5
+﻿# Nexus NAS — Linux 0.4.0
 
 Nexus transforme un serveur Debian/Ubuntu en NAS administrable depuis un
 navigateur sur le réseau local. La configuration se termine à l'écran : compte
@@ -39,6 +39,11 @@ et OpenSSL. Aucun npm install ni compilation ne sont nécessaires sur le NAS.
 
 ## Fonctions
 
+- Interface responsive, thèmes clair et sombre, animations et fenêtres intégrées.
+  Le tableau de bord affiche les courbes réelles du processeur et de la mémoire,
+  échantillonnées toutes les dix secondes sur dix minutes. Cet historique reste
+  en mémoire et repart à zéro au redémarrage du service. La durée de fonctionnement
+  du serveur affiche les jours, heures, minutes et secondes et avance chaque seconde.
 - Connexions et déconnexions, rôles administrateur/utilisateur, mots de passe
   hachés avec scrypt, cookies HttpOnly/SameSite, expiration et tentatives limitées.
 - Ajout, modification, réinitialisation, désactivation et réactivation des comptes

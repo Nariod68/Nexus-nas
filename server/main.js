@@ -1,10 +1,11 @@
 import http from 'node:http';
 import https from 'node:https';
+import os from 'node:os';
 import { readFile, realpath } from 'node:fs/promises';
 import { randomBytes, timingSafeEqual, createHash } from 'node:crypto';
 import { fileURLToPath } from 'node:url';
 import { pipeline } from 'node:stream/promises';
-import { snapshot } from './system.js';
+import { snapshot, MetricsCollector } from './system.js';
 import { latestRelease, newer, repository } from './releases.js';
 import { Store, passwordHash, passwordMatches, username } from './store.js';
 import { agentClient } from './agent-client.js';
@@ -25,6 +26,7 @@ export function createServer({ password, setupToken, statePath, storagePath = '/
   if (!password && (typeof setupToken !== 'string' || setupToken.length < 24)) throw new Error('Un code d’installation est requis');
   if (password && (typeof password !== 'string' || password.length < 16)) throw new Error('NEXUS_ADMIN_PASSWORD doit contenir au moins 16 caractères.');
   const state = new Store(statePath);
+  const metrics = new MetricsCollector({ sampler: () => snapshot(storagePath) });
   const ready = password ? state.change(async data => { if (!data.configured) { data.configured = true; data.users = [{ name: 'admin', role: 'admin', enabled: true, hash: await passwordHash(password) }]; } }) : Promise.resolve();
   const sessions = new Map(), attempts = new Map();
   function rateLimit(ip) {
@@ -87,7 +89,7 @@ export function createServer({ password, setupToken, statePath, storagePath = '/
           await state.change(data => { data.users.find(u => u.name === user.name).hash = hash; });
           for (const [key, session] of sessions) if (session.name === user.name) sessions.delete(key); return send(200, { ok: true });
         }
-        if (route === '/api/system' && req.method === 'GET') { admin(); return send(200, { ...await snapshot(storagePath), version: pkg.version }); }
+        if (route === '/api/system' && req.method === 'GET') { admin(); return send(200, { ...await metrics.get(), uptimeSeconds: Math.floor(os.uptime()), version: pkg.version }); }
         if (route === '/api/agent' && req.method === 'GET') { admin(); return send(200, await agent('state')); }
         if (route === '/api/users' && req.method === 'GET') { admin(); return send(200, (await state.read()).users.map(publicUser)); }
         if (route === '/api/users' && req.method === 'POST') {
@@ -160,7 +162,8 @@ export function createServer({ password, setupToken, statePath, storagePath = '/
   };
   const server = tls ? https.createServer(tls, handler) : http.createServer(handler);
   server.requestTimeout = 0; server.headersTimeout = 10000; server.setTimeout(60000);
-  server.on('close', () => clearInterval(housekeeping)); return server;
+  server.on('listening', () => metrics.start());
+  server.on('close', () => { clearInterval(housekeeping); metrics.stop(); }); return server;
 }
 if (process.argv[1] && await realpath(process.argv[1]).catch(() => '') === fileURLToPath(import.meta.url)) {
   const host = process.env.NEXUS_HOST || '0.0.0.0', port = Number(process.env.NEXUS_PORT || 8080);

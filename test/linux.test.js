@@ -28,6 +28,8 @@ test('installed Linux services, HTTPS setup, real Samba and file transfer', { sk
   assert.deepEqual(metrics.diagnostics, []);
   assert.equal((await request('/api/shares/save', 'POST', { name: 'citest', volume: 'system', members: [{ name: credentials.name, write: true }] }, cookie)).status, 200);
   assert.equal((await request('/api/files/upload?share=citest&path=hello.txt', 'PUT', 'Linux NAS transfer', cookie)).status, 201);
+  const folder = await request('/api/files/folder?share=citest&path=photos', 'POST', {}, cookie);
+  assert.equal(folder.status, 201, folder.data);
   assert.equal((await request('/api/files/download?share=citest&path=hello.txt', 'GET', undefined, cookie)).data, 'Linux NAS transfer');
   const auth = path.join(os.tmpdir(), 'nexus-smb-test-auth');
   await writeFile(auth, `username = nx_ciadmin\npassword = ${credentials.password}\n`, { mode: 0o600 });

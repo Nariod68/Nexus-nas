@@ -73,7 +73,9 @@ export async function uploadFile(root, relative, input, maximum = 50 * 1024 ** 3
 }
 export async function makeDirectory(root, relative) {
   const dir = await parent(root, relative);
-  try { await mkdir(path.join(dir.path, dir.name), { mode: 0o2770 }); } finally { await dir.close(); }
+  // Inherit setgid from the share; requesting it explicitly is denied by the
+  // web service's RestrictSUIDSGID sandbox.
+  try { await mkdir(path.join(dir.path, dir.name), { mode: 0o770 }); } finally { await dir.close(); }
 }
 export async function trashFile(root, relative) {
   const dir = await parent(root, relative), rootDir = await directory(root);
