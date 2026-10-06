@@ -78,7 +78,7 @@ export function createServer({ password, setupToken, statePath, storagePath = '/
         const user = session && session.expires > Date.now() ? (await state.read()).users.find(u => u.name === session.name && u.enabled) : null;
         if (!user) fail(401, 'Connexion requise');
         const admin = () => { if (user.role !== 'admin') fail(403, 'Réservé à un administrateur'); };
-        if (route === '/api/me' && req.method === 'GET') return send(200, { user: publicUser(user), onboarding: (await state.read()).onboarding === true });
+        if (route === '/api/me' && req.method === 'GET') return send(200, { user: publicUser(user), onboarding: (await state.read()).onboarding === true, version: pkg.version });
         if (route === '/api/onboarding' && req.method === 'POST') { admin(); await state.change(data => { data.onboarding = true; }); return send(200, { ok: true }); }
         if (route === '/api/logout' && req.method === 'POST') { sessions.delete(token); res.setHeader('Set-Cookie', 'nexus_session=; HttpOnly; SameSite=Strict; Path=/; Max-Age=0'); return send(200, { ok: true }); }
         if (route === '/api/password' && req.method === 'POST') {

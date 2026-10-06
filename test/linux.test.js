@@ -21,6 +21,11 @@ test('installed Linux services, HTTPS setup, real Samba and file transfer', { sk
   assert.equal((await request('/api/setup', 'POST', { token, ...credentials })).status, 200);
   const login = await request('/api/login', 'POST', credentials); assert.equal(login.status, 200);
   const cookie = login.cookie;
+  const system = await request('/api/system', 'GET', undefined, cookie);
+  assert.equal(system.status, 200, system.data);
+  const metrics = JSON.parse(system.data);
+  assert.ok(metrics.network.length > 0, 'The installed systemd service must enumerate real network interfaces');
+  assert.deepEqual(metrics.diagnostics, []);
   assert.equal((await request('/api/shares/save', 'POST', { name: 'citest', volume: 'system', members: [{ name: credentials.name, write: true }] }, cookie)).status, 200);
   assert.equal((await request('/api/files/upload?share=citest&path=hello.txt', 'PUT', 'Linux NAS transfer', cookie)).status, 201);
   assert.equal((await request('/api/files/download?share=citest&path=hello.txt', 'GET', undefined, cookie)).data, 'Linux NAS transfer');

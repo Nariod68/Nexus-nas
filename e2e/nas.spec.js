@@ -23,8 +23,15 @@ test('browser setup, SMB share, file upload/download, folder, removal and accoun
   await expect(page.getByRole('alert')).toContainText('Service Linux temporairement indisponible');
   await page.getByRole('button', { name: 'Réessayer' }).click();
   await expect(page.getByRole('heading', { name: 'Votre premier partage' })).toBeVisible();
+  await page.route('**/api/system', route => route.fulfill({ status: 400, contentType: 'application/json', body: JSON.stringify({ error: 'uv_interface_addresses returned Unknown system error 97' }) }));
   await page.getByRole('button', { name: 'Créer le partage et terminer' }).click();
   await expect(page.getByRole('heading', { name: 'Fichiers', exact: true })).toBeVisible();
+  await expect(page.locator('.app-shell')).not.toContainText('Mode démonstration');
+  await page.locator('[data-page=settings]').click();
+  await expect(page.getByRole('button', { name: 'Rechercher', exact: true })).toBeVisible();
+  await page.locator('[data-page=shares]').click();
+  await expect(page.getByRole('button', { name: 'Créer un partage', exact: true })).toBeVisible();
+  await page.locator('[data-page=files]').click();
   await page.locator('#file-upload').setInputFiles({ name: 'hello.txt', mimeType: 'text/plain', buffer: Buffer.from('Bonjour le NAS') });
   await expect(page.locator('#transfer-progress')).toHaveText('Transfert terminé.');
   await expect(page.locator('#file-rows')).toContainText('hello.txt');

@@ -5,12 +5,15 @@ if (location.protocol !== 'file:') {
   const bytes = n => n == null ? '—' : `${(n / 1024 ** 3).toFixed(1)} Gio`;
   let me, info, shares = [], users = [], folder = '', selectedShare = '', snapshotData, refreshBusy = false;
   let wizard = false;
+  let sharesReady = false;
+  const initialPages = new Map([...document.querySelectorAll('.page-view')].map(view => [view, view.innerHTML]));
+  const emptySystem = version => ({ version, hostname: null, system: null, architecture: null, uptimeSeconds: null, cpuPercent: null, memory: { total: null, available: null }, network: [], storage: null, diagnostics: [] });
   const status = document.createElement('p'); status.className = 'console-status'; status.setAttribute('role', 'status'); status.setAttribute('aria-live', 'polite'); document.querySelector('.page-container').prepend(status);
   function notify(message) { status.textContent = message; showNotice(message); }
   async function api(url, { method = 'GET', body, raw, timeout = 15000 } = {}) {
     const response = await fetch(url, { method, credentials: 'same-origin', headers: method === 'GET' ? {} : { 'X-Nexus-Request': '1', ...(raw ? {} : { 'Content-Type': 'application/json' }) }, body: raw || (body === undefined ? undefined : JSON.stringify(body)), signal: AbortSignal.timeout(timeout) });
     const data = await response.json();
-    if (!response.ok) { if (response.status === 401 && !url.includes('login')) { shell.hidden = true; await loginScreen(); } throw new Error(data.error || `HTTP ${response.status}`); }
+    if (!response.ok) { if (response.status === 401 && !url.includes('login')) { me = null; shell.hidden = true; await loginScreen(); } throw new Error(data.error || `HTTP ${response.status}`); }
     return data;
   }
   function formSubmit(form, work) {
@@ -25,6 +28,9 @@ if (location.protocol !== 'file:') {
   function heading(title, subtitle) { return `<div class="page-heading"><div><h1>${title}</h1><p class="page-subtitle">${subtitle}</p></div></div>`; }
   const field = (label, name, type = 'text', extra = '') => `<label>${label}<input name="${name}" type="${type}" ${extra}></label>`;
   async function loginScreen(setup = false) {
+    me = null; info = null; shares = []; users = []; snapshotData = null; sharesReady = false; wizard = false;
+    for (const [view, html] of initialPages) view.innerHTML = html;
+    status.textContent = '';
     gate.hidden = false; shell.hidden = true;
     gate.innerHTML = `<form class="panel login-panel"><img src="nexus-icon.svg" alt="Nexus" width="64" height="64"><h1>${setup ? 'Installer votre NAS' : 'Bienvenue sur Nexus'}</h1><p>${setup ? 'Entrez le code affiché à la fin de l’installation, puis créez votre compte administrateur.' : 'Connectez-vous avec votre compte Nexus.'}</p>${setup ? field('Code d’installation', 'token', 'password', 'required autocomplete="off"') : ''}${field('Nom d’utilisateur', 'name', 'text', 'required pattern="[a-z][a-z0-9_-]{2,19}" autocomplete="username"')}${field('Mot de passe', 'password', 'password', `required minlength="12" maxlength="256" autocomplete="${setup ? 'new-password' : 'current-password'}"`)}${setup ? field('Nom du serveur', 'hostname', 'text', 'required value="nexus-nas" pattern="[a-z][a-z0-9-]{0,62}"') : ''}<button class="primary-button" type="submit">${setup ? 'Créer mon serveur' : 'Se connecter'}</button><p class="login-error" role="alert"></p></form>`;
     formSubmit(gate.querySelector('form'), async data => {
@@ -38,6 +44,7 @@ if (location.protocol !== 'file:') {
   }
   async function connected() {
     const identity = await api('/api/me'); me = identity.user;
+    snapshotData = emptySystem(identity.version);
     document.querySelector('.profile-copy strong').textContent = me.name;
     document.querySelector('.profile-copy small').textContent = me.role === 'admin' ? 'Administrateur' : 'Utilisateur';
     document.querySelector('.demo-tag').textContent = 'CONNECTÉ';
@@ -49,9 +56,10 @@ if (location.protocol !== 'file:') {
         wizard = true; showWizard(); return;
       }
       await refresh(true, true);
+      if (!me) return;
       gate.hidden = true; shell.hidden = false;
       showPage(me.role === 'admin' ? (pageNames.fr[location.hash.slice(1)] ? location.hash.slice(1) : 'dashboard') : 'files');
-    } catch (error) { recoveryScreen(error.message); }
+    } catch (error) { if (me) recoveryScreen(error.message); }
   }
   function recoveryScreen(message) {
     gate.hidden = false; shell.hidden = true;
@@ -62,24 +70,48 @@ if (location.protocol !== 'file:') {
   async function refresh(full = false, strict = false) {
     if (refreshBusy || !me) return; refreshBusy = true;
     try {
-      shares = await api('/api/shares');
-      if (me.role === 'admin') {
-        [info, snapshotData, users] = await Promise.all([api('/api/agent'), api('/api/system'), api('/api/users')]);
+      const admin = me.role === 'admin';
+      const routes = admin ? ['/api/shares', '/api/agent', '/api/system', '/api/users'] : ['/api/shares'];
+      const results = await Promise.allSettled(routes.map(route => api(route)));
+      if (!me) return;
+      const issues = results.filter(r => r.status === 'rejected').map(r => r.reason.message);
+      const shareResult = results[0];
+      if (shareResult.status === 'fulfilled') { shares = shareResult.value; sharesReady = true; }
+      if (admin) {
+        const [, agentResult, systemResult, userResult] = results;
+        if (agentResult.status === 'fulfilled') info = agentResult.value;
+        if (systemResult.status === 'fulfilled') snapshotData = systemResult.value;
+        if (userResult.status === 'fulfilled') users = userResult.value;
+        if (systemResult.status === 'rejected') snapshotData.diagnostics = ['Mesures système indisponibles : ' + systemResult.reason.message];
         renderDashboard();
         renderJobs();
-        if (full) { renderStorage(); renderShares(); renderUsers(); renderSettings(); }
+        if (full) {
+          if (info) renderStorage(); else unavailablePage('storage', 'Stockage', agentResult.reason.message);
+          if (shareResult.status === 'fulfilled' && info && userResult.status === 'fulfilled') renderShares(); else unavailablePage('shares', 'Partages réseau', 'La configuration des partages ne peut pas être chargée.');
+          if (userResult.status === 'fulfilled') renderUsers(); else unavailablePage('users', 'Utilisateurs', userResult.reason.message);
+          renderSettings();
+        }
       }
-      if (full) { renderFiles(); await loadFiles(); }
-      status.textContent = '';
+      if (full) {
+        if (shareResult.status === 'fulfilled') { renderFiles(); await loadFiles(); }
+        else unavailablePage('files', 'Fichiers', shareResult.reason.message);
+      }
+      status.textContent = [...new Set([...issues, ...(snapshotData?.diagnostics || [])])].join(' · ');
     } catch (e) { if (strict) throw e; notify(`Connexion interrompue : ${e.message}`); }
     finally { refreshBusy = false; }
   }
+  function unavailablePage(page, title, message) {
+    const target = document.querySelector(`#page-${page}`);
+    target.innerHTML = `${heading(title, 'Service temporairement indisponible')}<section class="panel"><p role="alert">${E(message)}</p><button class="secondary-button">Réessayer</button></section>`;
+    target.querySelector('button').onclick = () => refresh(true);
+  }
   function renderDashboard() {
     const d = snapshotData;
-    document.querySelector('.server-card strong').textContent = d.hostname;
-    document.querySelector('.server-card small').textContent = `${d.system} · v${d.version}`;
+    document.querySelector('.server-card strong').textContent = d.hostname || 'NAS Nexus';
+    document.querySelector('.server-card small').textContent = `${d.system || 'Service Linux'} · v${d.version || '—'}`;
     const target = document.querySelector('#page-dashboard');
-    target.innerHTML = `${heading(`Bonjour, ${E(me.name)}`, 'Votre serveur NAS, vos fichiers et votre réseau.')}<div class="metric-grid">${[['Processeur', d.cpuPercent == null ? '—' : `${d.cpuPercent} %`], ['Mémoire', `${Math.round(100 * (1 - d.memory.available / d.memory.total))} %`], ['Partages', shares.length], ['Durée de fonctionnement', `${Math.floor(d.uptimeSeconds / 3600)} h`]].map(([title, value]) => `<article class="metric-card"><div class="metric-heading">${title}</div><div class="metric-value">${E(value)}</div></article>`).join('')}</div><div class="lower-grid"><section class="panel"><h2>Accès au serveur</h2><p>Interface : <a href="${E(location.origin)}">${E(location.origin)}</a></p>${d.network.map(n => `<p>${E(n.name)} : ${E(n.address)}</p>`).join('')}<p>Fichiers Windows : <code>\\${E(d.hostname)}</code></p><p>Fichiers Linux / macOS : <code>smb://${E(d.hostname)}</code></p><p>Compte SMB : <code>nx_${E(me.name)}</code> · même mot de passe que Nexus</p></section><section class="panel"><h2>Stockage surveillé</h2><p>${E(d.storage?.path)} : ${bytes(d.storage?.available)} disponibles sur ${bytes(d.storage?.total)}</p><p>${E(d.system)} · ${E(d.architecture)} · Nexus ${E(d.version)}</p><button class="secondary-button" id="live-refresh">Actualiser</button></section></div><section class="panel jobs-panel" id="jobs"><h2>Opérations système</h2></section>`;
+    const host = d.hostname || location.hostname;
+    target.innerHTML = `${heading(`Bonjour, ${E(me.name)}`, 'Votre serveur NAS, vos fichiers et votre réseau.')}<div class="metric-grid">${[['Processeur', d.cpuPercent == null ? '—' : `${d.cpuPercent} %`], ['Mémoire', d.memory?.total && d.memory.available != null ? `${Math.round(100 * (1 - d.memory.available / d.memory.total))} %` : '—'], ['Partages', sharesReady ? shares.length : '?'], ['Durée de fonctionnement', d.uptimeSeconds == null ? '—' : `${Math.floor(d.uptimeSeconds / 3600)} h`]].map(([title, value]) => `<article class="metric-card"><div class="metric-heading">${title}</div><div class="metric-value">${E(value)}</div></article>`).join('')}</div><div class="lower-grid"><section class="panel"><h2>Accès au serveur</h2><p>Interface : <a href="${E(location.origin)}">${E(location.origin)}</a></p>${d.network.map(n => `<p>${E(n.name)} : ${E(n.address)}</p>`).join('')}<p>Fichiers Windows : <code>\\${E(host)}</code></p><p>Fichiers Linux / macOS : <code>smb://${E(host)}</code></p><p>Compte SMB : <code>nx_${E(me.name)}</code> · même mot de passe que Nexus</p></section><section class="panel"><h2>Stockage surveillé</h2><p>${E(d.storage?.path || '—')} : ${bytes(d.storage?.available)} disponibles sur ${bytes(d.storage?.total)}</p><p>${E(d.system || '—')} · ${E(d.architecture || '—')} · Nexus ${E(d.version || '—')}</p><button class="secondary-button" id="live-refresh">Actualiser</button></section></div><section class="panel jobs-panel" id="jobs"><h2>Opérations système</h2></section>`;
     target.querySelector('#live-refresh').onclick = () => refresh(true);
   }
   function renderJobs() {
@@ -225,6 +257,7 @@ if (location.protocol !== 'file:') {
   document.querySelector('.topbar-actions').append(passwordButton, logout);
   document.querySelector('.help-button').addEventListener('click', e => { e.stopImmediatePropagation(); notify('Créez vos comptes, puis vos partages. La rubrique Fichiers permet les transferts. Le compte SMB porte le préfixe nx_.'); }, true);
   document.querySelectorAll('[data-page]').forEach(b => b.addEventListener('click', () => { if (me && b.dataset.page === 'files') loadFiles().catch(e => notify(e.message)); }));
+  document.querySelector('.brand').addEventListener('click', event => { if (me?.role === 'user') { event.preventDefault(); event.stopImmediatePropagation(); showPage('files'); loadFiles().catch(e => notify(e.message)); } }, true);
   setInterval(() => { if (me && !shell.hidden && !document.hidden) refresh(); }, 10000);
   (async () => { try { const setup = await api('/api/setup'); if (!setup.configured) await loginScreen(true); else { try { await connected(); } catch { await loginScreen(); } } } catch (e) { gate.innerHTML = `<div class="panel login-panel"><h1>Service Nexus indisponible</h1><p>${E(e.message)}</p><p>Lancez le service Nexus pour utiliser cette interface.</p></div>`; } })();
 }

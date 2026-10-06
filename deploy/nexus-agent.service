@@ -15,7 +15,7 @@ StateDirectory=nexus-agent
 StateDirectoryMode=0700
 UMask=0077
 NoNewPrivileges=true
-RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6 AF_NETLINK
 # Mount operations must be visible in the host namespace. Do not use
 # PrivateMounts, ProtectHome, ProtectSystem, ProtectKernel* or ReadWritePaths.
 

@@ -9,6 +9,7 @@ import { createServer } from '../server/main.js';
 import { components, listFiles, uploadFile, downloadFile, trashFile, listTrash, restoreTrash, purgeTrash } from '../server/files.js';
 import { diskReason, diskSafetyReason, partitionScript } from '../agent/disks.js';
 import { sambaConfig } from '../agent/main.js';
+import { snapshot, networkInfo } from '../server/system.js';
 
 test('setup, multiuser sessions, share ACL and file round trip', async t => {
   const temp = await mkdtemp(path.join(os.tmpdir(), 'nexus-app-')); t.after(() => rm(temp, { recursive: true, force: true }));
@@ -104,4 +105,16 @@ test('Samba enforces account allowlist, read-only members and no symlinks', () =
   const config = sambaConfig([{ name: 'documents', path: '/srv/nexus/data/documents', members: [{ name: 'alice', write: true }, { name: 'bob', write: false }] }]);
   assert.match(config, /valid users = nx_alice nx_bob/); assert.match(config, /write list = nx_alice\n/);
   assert.match(config, /follow symlinks = no/); assert.match(config, /guest ok = no/);
+});
+test('network enumeration error 97 leaves system metrics available and uses ip fallback', async () => {
+  const unavailable = () => { throw new Error('uv_interface_addresses returned Unknown system error 97'); };
+  const failed = await snapshot(process.cwd(), { networkGetter: unavailable, networkLookup: async () => null });
+  assert.ok(failed.hostname); assert.ok(failed.storage.total > 0);
+  assert.deepEqual(failed.network, []); assert.equal(failed.diagnostics.length, 1);
+  const fallback = await networkInfo(unavailable, async () => JSON.stringify([{ ifname: 'eth0', addr_info: [{ family: 'inet', scope: 'global', local: '192.168.1.55' }] }]));
+  assert.deepEqual(fallback.network, [{ name: 'eth0', address: '192.168.1.55' }]);
+});
+test('served application shell contains no demonstration disks, accounts or controls', async () => {
+  const html = await readFile(new URL('../index.html', import.meta.url), 'utf8');
+  for (const text of ['Mode démonstration', 'Prototype d’interface', 'WD80EFPX', '4,8', 'admin@maison.local', '192.168.1.20', 'check-updates-button']) assert.ok(!html.includes(text), text);
 });
