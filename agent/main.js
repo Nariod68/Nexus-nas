@@ -69,7 +69,8 @@ async function userAction(data) {
       await writeFile(stateFile, JSON.stringify(state), { mode: 0o600 });
     }
     await run('smbpasswd', ['-s', '-a', account], { input: `${data.password}\n${data.password}\n` });
-    await run('smbpasswd', ['-e', account]); return { ok: true };
+    await run('smbpasswd', ['-e', account]);
+    await run('systemctl', ['restart', 'smbd']); return { ok: true };
   });
 }
 async function queueJob(kind, work) {
@@ -101,7 +102,8 @@ export async function dispatch(action, data) {
   if (action === 'users.save') return userAction(data);
   if (action === 'users.disable') {
     username(data.name); if (!(await store.read()).users.includes(data.name)) throw new Error('Compte Nexus inconnu');
-    await run('smbpasswd', ['-d', `nx_${data.name}`]); return { ok: true };
+    await run('smbpasswd', ['-d', `nx_${data.name}`]);
+    await run('systemctl', ['restart', 'smbd']); return { ok: true };
   }
   if (action === 'hostname') {
     if (typeof data.name !== 'string' || !/^[a-z][a-z0-9-]{0,62}$/.test(data.name) || data.name.endsWith('-')) throw new Error('Nom de serveur invalide');

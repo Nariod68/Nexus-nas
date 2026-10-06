@@ -1,4 +1,4 @@
-﻿# Nexus NAS — Linux 0.3.0
+﻿# Nexus NAS — Linux 0.3.1
 
 Nexus transforme un serveur Debian/Ubuntu en NAS administrable depuis un
 navigateur sur le réseau local. La configuration se termine à l'écran : compte
@@ -72,6 +72,8 @@ nx_ : pour alice dans Nexus, utiliser nx_alice en SMB.
 - Navigateur : rubrique Fichiers de Nexus.
 
 Les comptes SMB n'ont pas d'accès SSH. Les comptes Linux existants sont conservés.
+Les changements de comptes et de partages redémarrent Samba pour appliquer les
+permissions immédiatement, et interrompent les connexions SMB en cours.
 Nexus refuse de prendre possession d'un compte nx_ existant hors de sa configuration.
 Retirer un partage conserve ses fichiers. Les accès web sont suspendus si un
 volume géré est déconnecté. Les fichiers internes .nexus-* et les liens symboliques

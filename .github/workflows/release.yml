@@ -46,3 +46,18 @@ jobs:
           fi
         env:
           GH_TOKEN: ${{ github.token }}
+  verify-upgrade:
+    if: github.ref == 'refs/heads/main'
+    needs: release
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/checkout@v4
+        with:
+          ref: v0.3.0
+          path: previous
+      - run: sudo bash previous/scripts/install.sh
+      - run: sudo env NEXUS_UPGRADE_INTEGRATION=1 /opt/nexus/runtime/bin/node --test test/upgrade.test.js
+      - name: Logs on upgrade failure
+        if: failure()
+        run: sudo journalctl -u nexus -u nexus-agent -n 100 --no-pager

@@ -70,6 +70,9 @@ if [[ ! -f /etc/nexus/server.key ]]; then
   chmod 640 /etc/nexus/server.key
   chmod 644 /etc/nexus/server.crt
 fi
+chown root:nexus /etc/nexus/server.key
+chmod 640 /etc/nexus/server.key
+chmod 644 /etc/nexus/server.crt
 touch /etc/samba/nexus-shares.conf
 if ! grep -q '/etc/samba/nexus-shares.conf' /etc/samba/smb.conf; then
   cp -p /etc/samba/smb.conf /etc/samba/smb.conf.before-nexus
