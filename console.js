@@ -140,6 +140,7 @@ if (location.protocol !== 'file:') {
         if (shareResult.status === 'fulfilled') { renderFiles(); await loadFiles(); }
         else unavailablePage('files', L("Fichiers"), shareResult.reason.message);
       }
+      if (!full && !document.querySelector('#page-files').hidden) await updateFileStorage();
       status.textContent = [...new Set([...issues, ...(snapshotData?.diagnostics || [])])].map(NexusI18n.message).join(' · ');
     } catch (e) { if (strict) throw e; notify(`${L("Connexion interrompue : ")}${e.message}`); }
     finally { refreshBusy = false; }
@@ -352,6 +353,7 @@ if (location.protocol !== 'file:') {
       } catch (e) { notify(e.message); }
     };
     const drop = target.querySelector('#file-drop');
+    drop.insertAdjacentHTML('beforebegin', '<section class="file-storage" id="file-storage"><div class="file-storage-heading"><div><strong>' + L('Disque du partage') + '</strong><p class="file-storage-summary">' + L('Chargement de l’espace disque…') + '</p></div><span class="file-storage-percent">—</span></div><div class="file-storage-track" role="progressbar" aria-label="' + L('Occupation du disque') + '" aria-valuemin="0" aria-valuemax="100"><span class="file-storage-fill"></span></div><p class="file-storage-state" role="status"></p></section>');
     const pickFiles = () => { if (!target.querySelector('#file-upload').disabled) target.querySelector('#file-upload').click(); };
     drop.onclick = pickFiles; drop.onkeydown = e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); pickFiles(); } };
     drop.ondragover = e => { e.preventDefault(); drop.classList.add('drag-active'); }; drop.ondragleave = () => drop.classList.remove('drag-active'); drop.ondrop = e => { e.preventDefault(); drop.classList.remove('drag-active'); upload(e.dataTransfer.files); };
@@ -426,9 +428,38 @@ if (location.protocol !== 'file:') {
   }
   const fileUrl = (route, relative = folder) => `${route}?${new URLSearchParams({ share: selectedShare, path: relative })}`;
   let fileEntries = [];
+  let storageSequence = 0;
+  async function updateFileStorage() {
+    const area = document.querySelector('#file-storage'); if (!area) return;
+    const share = selectedShare, sequence = ++storageSequence;
+    const unavailable = message => {
+      area.classList.add('is-unavailable'); area.querySelector('.file-storage-summary').textContent = message;
+      area.querySelector('.file-storage-percent').textContent = '—'; area.querySelector('.file-storage-fill').style.width = '0%';
+      area.querySelector('[role=progressbar]').removeAttribute('aria-valuenow'); area.querySelector('[role=progressbar]').removeAttribute('aria-valuetext'); area.querySelector('.file-storage-state').textContent = '';
+    };
+    if (!share) { unavailable(L('Aucun partage autorisé.')); return; }
+    try {
+      const data = await api('/api/files/storage?' + new URLSearchParams({ share }));
+      if (sequence !== storageSequence || share !== selectedShare || !area.isConnected) return;
+      if (!Number.isFinite(data.total) || data.total <= 0 || !Number.isFinite(data.available)) throw new Error('Unavailable storage');
+      const available = Math.max(0, Math.min(data.total, data.available)), ratio = 1 - available / data.total;
+      const percent = Math.round(ratio * 100), hue = Math.round(145 * (1 - ratio));
+      area.classList.remove('is-unavailable'); area.style.setProperty('--storage-color', 'hsl(' + hue + ' 78% 48%)');
+      area.dataset.level = ratio >= .9 ? 'danger' : ratio >= .75 ? 'caution' : 'normal';
+      area.querySelector('.file-storage-summary').textContent = bytes(available) + ' ' + L('disponibles') + ' / ' + bytes(data.total);
+      area.querySelector('.file-storage-percent').textContent = percent + ' %';
+      const progress = area.querySelector('[role=progressbar]'); progress.setAttribute('aria-valuenow', percent);
+      progress.setAttribute('aria-valuetext', percent + ' % · ' + bytes(available) + ' ' + L('disponibles'));
+      area.querySelector('.file-storage-fill').style.width = ratio * 100 + '%';
+      area.querySelector('.file-storage-state').textContent = available <= 16 * 1024 ** 2 ? L('Disque plein : espace insuffisant pour déposer des fichiers.') : ratio >= .9 ? L('Le disque est presque plein.') : L('Espace disponible pour vos fichiers.');
+    } catch {
+      if (sequence === storageSequence && area.isConnected) unavailable(L('Espace disque indisponible'));
+    }
+  }
   async function loadFiles() {
     const target = document.querySelector('#page-files'), body = target.querySelector('#file-rows'); if (!body) return;
     const path = target.querySelector('#file-path');
+    updateFileStorage();
     if (!selectedShare) path.textContent = L("Aucun partage autorisé.");
     else {
       const parts = folder ? folder.split('/') : [];

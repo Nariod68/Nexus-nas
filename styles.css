@@ -242,6 +242,17 @@ button.file-name { cursor: pointer; text-decoration: underline; text-decoration-
 .connection-checks { padding: 15px; border: 1px solid var(--line); border-radius: 12px; }
 .connection-checks p { display: flex; align-items: center; gap: 8px; margin: 8px 0 0; font-size: 12px; }
 .connection-repair { border-top: 1px solid var(--line); padding-top: 18px; }
+.file-storage { --storage-color: var(--mint); margin: 20px 23px 0; padding: 17px 19px; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 13px; }
+.file-storage-heading { display: flex; align-items: center; justify-content: space-between; gap: 16px; }
+.file-storage-heading strong { font-size: 12px; }
+.file-storage-summary { margin: 5px 0 0; font-size: 11px; color: var(--muted); }
+.file-storage-percent { font-size: 23px; font-weight: 650; font-variant-numeric: tabular-nums; color: var(--storage-color); white-space: nowrap; transition: color .5s; }
+.file-storage-track { overflow: hidden; height: 9px; margin-top: 14px; border-radius: 10px; background: var(--line); }
+.file-storage-fill { display: block; height: 100%; width: 0; border-radius: inherit; background: var(--storage-color); transition: width .6s ease, background-color .6s ease; }
+.file-storage-state { margin: 10px 0 0; color: var(--muted); font-size: 10px; }
+.file-storage[data-level=danger] .file-storage-state { color: var(--danger, #ef646c); }
+.file-storage.is-unavailable .file-storage-percent { color: var(--muted); }
+@media (max-width: 760px) { .file-storage { margin: 18px 18px 0; padding: 15px; } .file-storage-percent { font-size: 21px; } }
 @media (max-width: 760px) { .preview-button { width: 40px; height: 36px; } }
 .file-size, .file-date { color: var(--muted); font-size: 10px; white-space: nowrap; }
 .table-actions { display: flex; justify-content: flex-end; align-items: center; gap: 5px; }

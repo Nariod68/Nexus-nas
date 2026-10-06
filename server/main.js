@@ -9,7 +9,7 @@ import { snapshot, MetricsCollector } from './system.js';
 import { latestRelease, newer, repository } from './releases.js';
 import { Store, passwordHash, passwordMatches, username } from './store.js';
 import { agentClient } from './agent-client.js';
-import { listFiles, downloadFile, previewFile, uploadFile, makeDirectory, trashFile, moveFile, listTrash, restoreTrash, purgeTrash } from './files.js';
+import { listFiles, downloadFile, previewFile, storageUsage, uploadFile, makeDirectory, trashFile, moveFile, listTrash, restoreTrash, purgeTrash } from './files.js';
 
 const root = new URL('../', import.meta.url);
 const pkg = JSON.parse(await readFile(new URL('package.json', root), 'utf8'));
@@ -143,6 +143,7 @@ export function createServer({ password, setupToken, statePath, storagePath = '/
           if (!info.volumes.some(v => v.id === share.volume)) fail(503, 'Volume déconnecté : accès aux fichiers suspendu');
           const relative = url.searchParams.get('path') || '';
           const writable = () => { if (user.role !== 'admin' && !share.members.some(m => m.name === user.name && m.write)) fail(403, 'Partage en lecture seule'); };
+          if (route === '/api/files/storage' && req.method === 'GET') return send(200, await storageUsage(share.path));
           if (route === '/api/files/trash' && req.method === 'GET') return send(200, await listTrash(share.path));
           if (route === '/api/files/restore' && req.method === 'POST') { writable(); const input = await jsonBody(req); await restoreTrash(share.path, input.id, input.destination); return send(200, { ok: true }); }
           if (route === '/api/files/purge' && req.method === 'POST') { writable(); const input = await jsonBody(req); await purgeTrash(share.path, input.confirmation); return send(200, { ok: true }); }

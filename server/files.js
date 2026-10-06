@@ -34,6 +34,16 @@ async function parent(root, relative) {
   const parts = components(relative); if (!parts.length) throw new Error('La racine est protégée');
   const name = parts.pop(); return { ...await directory(root, parts.join('/')), name };
 }
+export async function storageUsage(root) {
+  const dir = await directory(root);
+  try {
+    const usage = await statfs(dir.path);
+    const total = usage.blocks * usage.bsize;
+    const available = Math.max(0, Math.min(total, usage.bavail * usage.bsize));
+    // Include filesystem-reserved space: it cannot be used by the NAS account.
+    return { total, available, used: Math.max(0, total - available) };
+  } finally { await dir.close(); }
+}
 export async function listFiles(root, relative) {
   const dir = await directory(root, relative);
   try {

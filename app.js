@@ -391,7 +391,10 @@ const NexusI18n = (() => {
   "Votre accès NAS est prêt": "Your NAS access is ready", "Votre accès nécessite une réparation": "Your access needs repair", "À corriger": "Needs attention",
   "Accès SMB rétabli. Ouvrez maintenant l’assistant Windows.": "SMB access restored. Open the Windows helper now.",
   "Aperçu de l’image": "Image preview", "Aperçu indisponible": "Preview unavailable", "Aperçu trop volumineux": "Image too large to preview",
-  "La politique Windows bloque l’authentification NTLM utilisée par ce NAS. Contactez l’administrateur de ce PC.": "Windows policy blocks the NTLM authentication used by this NAS. Contact this PC’s administrator."
+  "La politique Windows bloque l’authentification NTLM utilisée par ce NAS. Contactez l’administrateur de ce PC.": "Windows policy blocks the NTLM authentication used by this NAS. Contact this PC’s administrator.",
+  "Disque du partage": "Share disk", "Chargement de l’espace disque…": "Loading disk space…", "Occupation du disque": "Disk usage",
+  "disponibles": "available", "Disque plein : espace insuffisant pour déposer des fichiers.": "Disk full: insufficient space to upload files.",
+  "Le disque est presque plein.": "The disk is almost full.", "Espace disponible pour vos fichiers.": "Space available for your files.", "Espace disque indisponible": "Disk space unavailable"
 };
   const keys = Object.keys(english).sort((a, b) => b.length - a.length);
   const escapePattern = key => [...key].map(char => '.+*?^$()[]{}|\\'.includes(char) ? '\\' + char : char).join('');

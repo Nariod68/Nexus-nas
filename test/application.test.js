@@ -41,6 +41,10 @@ test('setup, multiuser sessions, share ACL and file round trip', async t => {
   assert.equal((await request(file, { method: 'PUT', cookie, raw: Buffer.from('overwrite') })).status, 409);
   assert.equal(await (await request('/api/files/download?share=docs&path=hello.txt', { cookie })).text(), 'Bonjour NAS');
   assert.equal((await (await request('/api/files?share=docs', { cookie })).json())[0].name, 'hello.txt');
+  const capacity = await request('/api/files/storage?share=docs', { cookie });
+  assert.equal(capacity.status, 200);
+  const space = await capacity.json(); assert.ok(space.total > 0); assert.ok(space.available >= 0 && space.available <= space.total); assert.equal(space.used + space.available, space.total);
+  assert.equal((await request('/api/files/storage?share=unknown', { cookie })).status, 403);
   const png = Buffer.from('89504e470d0a1a0a0000000000000000', 'hex');
   assert.equal((await request('/api/files/upload?share=docs&path=photo.png', { method: 'PUT', cookie, raw: png })).status, 201);
   const preview = await request('/api/files/preview?share=docs&path=photo.png', { cookie });
@@ -54,6 +58,7 @@ test('setup, multiuser sessions, share ACL and file round trip', async t => {
   assert.equal((await request('/api/disks/plan', { method: 'POST', cookie: bob, body: {} })).status, 403);
   assert.equal((await request(file, { method: 'PUT', cookie: bob, raw: Buffer.from('no') })).status, 403);
   assert.equal((await request('/api/files/download?share=docs&path=hello.txt', { cookie: bob })).status, 200);
+  assert.equal((await request('/api/files/storage?share=docs', { cookie: bob })).status, 200);
   assert.equal((await request('/api/files/preview?share=docs&path=photo.png', { cookie: bob })).status, 200);
   assert.equal((await request('/api/users/disable', { method: 'POST', cookie, body: { name: 'bob' } })).status, 200);
   assert.equal((await request('/api/files?share=docs', { cookie: bob })).status, 401);
