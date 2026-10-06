@@ -1,136 +1,136 @@
-﻿# Nexus NAS
+﻿# Nexus NAS — Linux 0.3.0
 
-Nexus est une interface web pour un NAS personnel Linux. La version **0.2.0**
-ajoute un service réel : connexion administrateur, état du serveur, disques,
-configuration Samba existante, comptes Linux et recherche de publications GitHub.
+Nexus transforme un serveur Debian/Ubuntu en NAS administrable depuis un
+navigateur sur le réseau local. La configuration se termine à l'écran : compte
+administrateur, disques, premier partage et utilisateurs.
 
-Cette première version est une **console de supervision en lecture seule**,
-installable sur un Linux existant. La création des partages et utilisateurs,
-le formatage, le RAID, SMART, les sauvegardes et les actions système restent
-à développer. Leurs boutons sont désactivés en mode connecté. Les informations
-indisponibles sont indiquées comme telles, sans inventer de bonne santé disque.
-Windows sera une cible ultérieure.
+## Installation rapide
 
-## Essayer sur Linux
-
-Prérequis : Node.js 22 ou supérieur. Aucun npm install nécessaire.
-Linux avec systemd est requis pour l'installation permanente. lsblk (util-linux),
-getent et systemctl fournissent les données Linux. Samba et testparm sont optionnels :
-Nexus lit une configuration existante, sans installer Samba ni créer de partage.
+Sur Debian 12/13 ou Ubuntu 22.04/24.04 avec systemd, x86_64 ou ARM64,
+copier cette ligne dans le terminal du serveur :
 
 ```bash
-read -rsp 'Mot de passe Nexus (16 caractères minimum) : ' NEXUS_ADMIN_PASSWORD
-echo
-export NEXUS_ADMIN_PASSWORD
-npm start
+sudo apt-get update && sudo apt-get install -y curl && curl -fsSL https://raw.githubusercontent.com/Nariod68/Nexus-nas/main/scripts/install.sh -o /tmp/nexus-install.sh && sudo bash /tmp/nexus-install.sh
 ```
 
-Ouvrir http://127.0.0.1:8080. Les sessions sont en mémoire, expirent après huit
-heures et sont révoquées au redémarrage. Le mot de passe reste hors du navigateur.
-Ouvrir directement index.html conserve la maquette avec ses valeurs fictives.
-Un serveur statique ne suffit pas pour le mode connecté : celui-ci attend l'API.
+Si curl est déjà installé, commencer directement par curl. L'installateur télécharge
+la dernière Release stable (ou main avant la première publication), installe les
+composants et affiche l'adresse du serveur et un code de première installation.
+Aucun disque n'est formaté pendant l'installation.
 
-## Installer sur le NAS
+1. Depuis un ordinateur du même réseau, ouvrir l'adresse affichée, par exemple
+   http://192.168.1.50:8080. Elle redirige vers https://192.168.1.50:8443.
+2. Accepter le certificat local auto-signé du NAS. Il peut ensuite être remplacé
+   par un certificat reconnu dans /etc/nexus/server.crt et server.key.
+3. Saisir le code d'installation, choisir le nom du serveur et créer un compte.
+4. Choisir le stockage système existant, ou préparer un disque inutilisé. Créer
+   le premier partage, puis terminer.
 
-Télécharger les sources du dépôt https://github.com/Nariod68/Nexus-nas,
-puis, depuis leur dossier :
+Le code initial ne permet plus de reconfigurer le serveur après le setup.
+Le nom choisi est annoncé via mDNS, par exemple https://nexus-nas.local:8443 ;
+la résolution .local dépend du support mDNS du client. L'adresse IP fonctionne
+indépendamment de mDNS. Un pare-feu peut nécessiter l'autorisation des ports
+8080, 8443 et 445. Si UFW est déjà actif, l'installateur ouvre ces ports uniquement
+pour les réseaux IPv4 privés.
+
+L'installation nécessite Internet et sudo. Elle installe Node.js 22 avec
+vérification SHA-256 dans un dossier dédié, Samba, les outils GPT/ext4, Avahi
+et OpenSSL. Aucun npm install ni compilation ne sont nécessaires sur le NAS.
+
+## Fonctions
+
+- Connexions et déconnexions, rôles administrateur/utilisateur, mots de passe
+  hachés avec scrypt, cookies HttpOnly/SameSite, expiration et tentatives limitées.
+- Ajout, modification, réinitialisation, désactivation et réactivation des comptes
+  Nexus/SMB ; révocation des sessions après modification du compte.
+- Partages SMB privés avec permissions de lecture ou lecture/écriture par compte.
+- Dépôt multiple et glisser-déposer, progression, téléchargement, création de
+  dossiers, renommage de fichiers et retrait vers une corbeille.
+- Restauration et vidage définitif de la corbeille. Les dépôts n'écrasent pas les
+  fichiers existants. La corbeille occupe de l'espace jusqu'à son vidage.
+- Partitionnement d'un disque entier en une ou plusieurs partitions GPT/ext4,
+  formatage, montage et inscription persistante dans fstab.
+- Recherche et installation de Releases GitHub depuis Paramètres, contrôle de
+  santé, retour à la version précédente et suivi des opérations.
+- Changement de nom et redémarrage du serveur avec confirmation explicite.
+
+Le partitionnement détruit toutes les données du disque choisi. Il exige un plan
+valable cinq minutes et la saisie de EFFACER /dev/nom-du-disque. Les disques montés
+(dont le disque système), swap, RAID, LVM et chiffrés sont refusés.
+Cette version gère des volumes ext4 indépendants ; elle ne crée pas de RAID,
+ne redimensionne pas les volumes existants, et ne fournit pas encore de système
+de sauvegarde ou de diagnostic SMART complet.
+
+## Accéder aux fichiers par SMB
+
+Créer les comptes dans Utilisateurs, puis accorder les droits dans Partages réseau.
+Le mot de passe est identique sur le web et en SMB. Le nom SMB porte le préfixe
+nx_ : pour alice dans Nexus, utiliser nx_alice en SMB.
+
+- Windows : ouvrir \\adresse-du-nas\nom-du-partage dans l'Explorateur.
+- Linux/macOS : ouvrir smb://adresse-du-nas/nom-du-partage.
+- Navigateur : rubrique Fichiers de Nexus.
+
+Les comptes SMB n'ont pas d'accès SSH. Les comptes Linux existants sont conservés.
+Nexus refuse de prendre possession d'un compte nx_ existant hors de sa configuration.
+Retirer un partage conserve ses fichiers. Les accès web sont suspendus si un
+volume géré est déconnecté. Les fichiers internes .nexus-* et les liens symboliques
+ne sont pas accessibles par SMB/web. Limite de dépôt : 50 Gio par fichier,
+et l'espace effectivement disponible sur le volume.
+
+## Mises à jour
+
+Dans Paramètres, rechercher puis installer une nouvelle version. Nexus vérifie
+la version, le manifeste et SHA-256, installe dans un nouveau dossier et contrôle
+les services après redémarrage. Un échec entraîne le retour à la version précédente.
+Les comptes et partages restent dans les dossiers de données. Les anciennes
+versions sont conservées pour le retour arrière.
+
+La confiance repose sur le dépôt GitHub et ses mainteneurs. SHA-256 vérifie
+l'intégrité, sans signature indépendante. Le mécanisme met à jour Nexus ; les
+mises à jour Linux et des paquets système restent celles du système.
+Le workflow teste main et publie automatiquement une Release pour chaque nouveau
+numéro de package.json. Une version déjà publiée n'est pas remplacée.
+
+## Maintenance
 
 ```bash
-sudo bash scripts/install.sh
-sudo systemctl status nexus
-sudo cat /etc/nexus/nexus.env
+sudo systemctl status nexus nexus-agent smbd
+sudo journalctl -u nexus -u nexus-agent -n 100
 ```
 
-Le script crée le compte système nexus sans connexion interactive, un service
-systemd non privilégié et un mot de passe aléatoire. Les fichiers installés sont
-détenus par root. Il refuse d'écraser une installation existante.
+- Configuration et certificat : /etc/nexus/.
+- Application : /opt/nexus/current, versions dans /opt/nexus/releases/.
+- Moteur Node : /opt/nexus/runtime/bin/node.
+- Comptes web : /var/lib/nexus/state.json, accessible au service nexus.
+- État agent, opérations et audit : /var/lib/nexus-agent/.
+- Données : /srv/nexus/data et /srv/nexus/volumes/UUID.
+- Samba : /etc/samba/nexus-shares.conf ; smb.conf préexistant conservé avec une
+  sauvegarde smb.conf.before-nexus.
 
-- Application : /opt/nexus/current, lien vers /opt/nexus/releases/.
-- Configuration et mot de passe : /etc/nexus/nexus.env, accessible uniquement à root.
-- Journaux : sudo journalctl -u nexus.
-- Stockage surveillé : NEXUS_STORAGE_PATH=/, à remplacer par le point de montage
-  des données, par exemple /srv/nas. Les capacités représentent ce système de
-  fichiers, pas la somme des disques physiques.
+Le serveur web s'exécute sans root. L'agent root n'écoute que sur un socket Unix
+accessible au compte système nexus et expose des actions déterminées, sans shell
+ni exécuteur de commandes arbitraires. Les transferts s'effectuent en flux. Sur
+Linux, les dossiers sont ouverts avec O_NOFOLLOW et des descripteurs épinglés.
 
-Depuis un autre ordinateur, utiliser d'abord un tunnel SSH :
+Pour migrer une installation 0.2, lancer le nouvel installateur avec --upgrade.
+Le mot de passe existant devient celui du compte admin. Synchroniser le mot de
+passe de ce compte via Mon compte pour activer SMB avant de créer un partage.
+Le retour arrière graphique vise les versions 0.3 et ultérieures.
 
-```bash
-ssh -L 8080:127.0.0.1:8080 utilisateur@adresse-du-nas
-```
-
-Puis ouvrir http://127.0.0.1:8080 sur cet ordinateur. Pour un accès habituel,
-placer un reverse proxy HTTPS devant le service local et définir dans nexus.env :
-NEXUS_PUBLIC_ORIGIN=https://nas.example et NEXUS_SECURE_COOKIE=1.
-Le proxy doit transmettre Host et Origin. Nexus ne fait pas confiance aux en-têtes
-forwarded. Redémarrer après modification : sudo systemctl restart nexus.
-
-NEXUS_HOST, NEXUS_PORT et NEXUS_STORAGE_PATH sont configurables. Pour le contrôle
-de santé des mises à jour, conserver une écoute incluant 127.0.0.1. Les fichiers
-personnels ne sont pas servis par l'API. Les comptes affichés sont les comptes
-Linux, distincts de l'administrateur Nexus. Les partages reflètent la configuration
-Samba ; leur accessibilité depuis un client n'est pas contrôlée.
-
-## Publier sur GitHub
-
-Le dépôt prévu est Nariod68/Nexus-nas, déjà référencé dans la maquette.
-Le changer dans server/releases.js et app.js si nécessaire. Cette préparation
-locale ne publie pas les fichiers : ajouter le dossier au dépôt, y compris
-.github/workflows/release.yml.
-
-1. Exécuter npm test et npm run release:pack.
-2. Mettre à jour la version de package.json pour chaque nouvelle publication.
-3. Pousser un tag correspondant exactement, par exemple v0.2.0.
+## Développement et validation
 
 ```bash
-git tag v0.2.0
-git push origin v0.2.0
-```
-
-GitHub Actions teste sous Ubuntu et crée une Release stable avec
-nexus-v0.2.0.json et nexus-v0.2.0.json.sha256. Le paquet contient les seuls fichiers
-applicatifs autorisés en base64. Pour la première installation, télécharger les
-sources de la Release. Les mises à jour utilisent le paquet dédié.
-Un commit seul ne déclenche pas de mise à jour chez les utilisateurs.
-
-## Mettre à jour
-
-Le bouton dans Paramètres cherche la dernière Release stable depuis le serveur.
-Pour l'installer dans le terminal du NAS :
-
-```bash
-sudo node /opt/nexus/current/scripts/update.js
-```
-
-L'outil refuse les versions anciennes ou identiques. Il vérifie SHA-256, le digest
-GitHub si présent, les noms de fichiers et la version du paquet. Il conserve
-l'ancien dossier, bascule le lien courant, redémarre le service et contrôle sa
-réponse. Un échec déclenche le retour à la version précédente. /etc/nexus reste
-intact. SHA-256 assure l'intégrité, pas une signature indépendante : la confiance
-repose sur le dépôt GitHub et ses mainteneurs.
-
-Retour manuel à la version précédente :
-
-```bash
-sudo node /opt/nexus/current/scripts/update.js --rollback
-```
-
-Les anciennes versions sont conservées. Un verrou empêche les mises à jour
-simultanées. Après une interruption brutale, vérifier les processus et l'état
-de l'installation avant de retirer /opt/nexus/.update-lock. Le mécanisme met à
-jour Nexus, pas Linux ou Samba.
-
-## Vérification
-
-```bash
+npm ci
 npm test
-node --check app.js
-node --check live.js
-bash -n scripts/install.sh
+npx playwright install chromium
+npm run test:browser
 npm run release:pack
 ```
 
-Les tests couvrent les sessions, origines étrangères, limites de connexion,
-fichiers privés, lecture système et paquets corrompus ou contenant des chemins
-inattendus. GitHub Actions les exécute sur Linux. L'installation systemd et la
-récupération après un redémarrage raté doivent encore être validées sur une VM Linux
-avant l'utilisation sur un NAS contenant des données importantes.
+Les tests API couvrent setup, sessions, rôles, permissions, transferts, chemins,
+paquets et protections de disque. Chromium parcourt l'interface avec un agent de
+test sans accès aux disques. Sur une VM Linux jetable, GitHub Actions installe les
+services et vérifie HTTPS, Samba et le partitionnement GPT/ext4 sur un fichier
+attaché à un loop créé exclusivement pour ce test. Aucun disque physique n'est
+ciblé par les tests. L'installation Windows reste une cible ultérieure.

@@ -1,12 +1,18 @@
 {
   "name": "nexus-nas",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "private": true,
   "type": "module",
-  "engines": { "node": ">=22" },
+  "engines": {
+    "node": ">=22"
+  },
   "scripts": {
     "start": "node server/main.js",
     "test": "node --test",
+    "test:browser": "playwright test",
     "release:pack": "node scripts/pack.js"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
   }
 }

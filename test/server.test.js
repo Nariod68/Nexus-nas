@@ -56,13 +56,14 @@ test('release comparison and API failure', async () => {
   await assert.rejects(latestRelease(async () => ({ ok: false, status: 404 })), /Aucune publication/);
 });
 test('bundle rejects corruption, traversal and wrong version', async () => {
-  const bundle = { version: 'v0.2.0', files: {} };
+  const version = `v${JSON.parse(await readFile(new URL('../package.json', import.meta.url))).version}`;
+  const bundle = { version, files: {} };
   for (const name of files) bundle.files[name] = (await readFile(new URL(`../${name}`, import.meta.url))).toString('base64');
   const bytes = Buffer.from(JSON.stringify(bundle));
-  assert.equal(validateBundle(bytes, checksum(bytes), 'v0.2.0').size, files.length);
-  assert.throws(() => validateBundle(bytes, '0'.repeat(64), 'v0.2.0'), /Intégrité/);
-  assert.throws(() => validateBundle(bytes, checksum(bytes), 'v0.3.0'), /Manifeste/);
+  assert.equal(validateBundle(bytes, checksum(bytes), version).size, files.length);
+  assert.throws(() => validateBundle(bytes, '0'.repeat(64), version), /Intégrité/);
+  assert.throws(() => validateBundle(bytes, checksum(bytes), 'v99.0.0'), /Manifeste/);
   delete bundle.files['live.js']; bundle.files['../../etc/passwd'] = 'eA==';
   const hostile = Buffer.from(JSON.stringify(bundle));
-  assert.throws(() => validateBundle(hostile, checksum(hostile), 'v0.2.0'), /Manifeste/);
+  assert.throws(() => validateBundle(hostile, checksum(hostile), version), /Manifeste/);
 });

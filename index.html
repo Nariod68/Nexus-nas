@@ -12,7 +12,7 @@
     <title>Nexus — Tableau de bord</title>
     <link rel="stylesheet" href="styles.css?v=7" />
     <script src="app.js?v=6" defer></script>
-    <script src="live.js?v=1" defer></script>
+    <script src="console.js?v=3" defer></script>
   </head>
   <body>
     <div class="app-shell">
@@ -55,6 +55,7 @@
             <span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><circle cx="9" cy="8" r="3.3"/><path d="M2.8 20v-1.6a6.2 6.2 0 0 1 12.4 0V20H2.8ZM17 5.2a3.2 3.2 0 0 1 0 6.1M17 14a5.2 5.2 0 0 1 4.2 5.1v.9h-3"/></svg></span>
             <span>Utilisateurs</span>
           </button>
+          <button class="nav-item" type="button" data-page="files"><span class="nav-icon" aria-hidden="true"><svg viewBox="0 0 24 24"><path d="M3 7h7l2 2h9v11H3zM12 12v5m-2-2 2 2 2-2"/></svg></span><span>Fichiers</span></button>
         </nav>
 
         <div class="nav-label system-label">SYSTÈME</div>
@@ -272,6 +273,7 @@
             <section class="panel table-panel"><div class="panel-heading"><div><h2>Comptes du serveur</h2><p>3 comptes dans cet exemple</p></div><button class="filter-button" type="button" data-notice="Le filtrage sera disponible dans une prochaine version.">Tous les comptes <span aria-hidden="true">⌄</span></button></div><div class="table-scroll"><table><thead><tr><th>UTILISATEUR</th><th>RÔLE</th><th>PARTAGES ACCESSIBLES</th><th>DERNIÈRE ACTIVITÉ</th><th>ÉTAT</th></tr></thead><tbody><tr><td><span class="user-avatar avatar-purple">A</span><strong>admin</strong><small>admin@maison.local</small></td><td>Administrateur</td><td>Tous les partages</td><td>À l’instant</td><td><span class="health-pill"><i></i> Actif</span></td></tr><tr><td><span class="user-avatar avatar-blue">M</span><strong>marie</strong><small>marie@maison.local</small></td><td>Utilisateur</td><td>Documents, Photos</td><td>Il y a 2 h</td><td><span class="health-pill"><i></i> Actif</span></td></tr><tr><td><span class="user-avatar avatar-orange">J</span><strong>jean</strong><small>jean@maison.local</small></td><td>Utilisateur</td><td>Documents, Public</td><td>Hier</td><td><span class="health-pill"><i></i> Actif</span></td></tr></tbody></table></div></section>
           </section>
 
+          <section class="page-view secondary-page" id="page-files" aria-label="Fichiers" hidden><div class="panel">Connectez-vous au service Nexus pour parcourir vos fichiers.</div></section>
           <section class="page-view secondary-page" id="page-settings" aria-labelledby="settings-title" hidden>
             <div class="page-heading"><div><p class="eyebrow">SYSTÈME</p><h1 id="settings-title">Paramètres</h1><p class="page-subtitle">Informations générales de votre serveur.</p></div></div>
             <div class="notice-banner"><span class="notice-icon" aria-hidden="true">i</span><p><strong>Mode démonstration</strong> — Ces paramètres sont illustratifs. Modifier le réseau ou redémarrer un serveur nécessite un accès système contrôlé.</p></div>

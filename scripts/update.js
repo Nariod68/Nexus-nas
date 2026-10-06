@@ -1,10 +1,21 @@
-import { readFile, writeFile, mkdir, realpath, symlink, rename, unlink, open } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, realpath, symlink, rename, unlink, open, copyFile } from 'node:fs/promises';
 import { execFileSync } from 'node:child_process';
 import path from 'node:path';
 import { latestRelease, newer, repository } from '../server/releases.js';
 import { validateBundle } from './bundle.js';
 
 const base = '/opt/nexus';
+async function report(status, message) {
+  await mkdir('/var/lib/nexus-agent', { recursive: true, mode: 0o700 });
+  const file = '/var/lib/nexus-agent/update-status.json';
+  const old = await readFile(file, 'utf8').then(JSON.parse).catch(() => ({}));
+  await writeFile(file + '.new', JSON.stringify({ ...old, status, message, time: new Date().toISOString() }), { mode: 0o600 });
+  await rename(file + '.new', file);
+}
+async function deployUnits(target) {
+  for (const name of ['nexus.service', 'nexus-agent.service']) await copyFile(path.join(target, 'deploy', name), `/etc/systemd/system/${name}`);
+  execFileSync('systemctl', ['daemon-reload']);
+}
 async function download(url, limit) {
   if (!url.startsWith(`https://github.com/${repository}/releases/download/`)) throw new Error('URL de publication refusée');
   const response = await fetch(url, { signal: AbortSignal.timeout(60000) });
@@ -32,6 +43,7 @@ async function main() {
   if (process.argv.slice(2).some(arg => arg !== '--rollback')) throw new Error('Option inconnue');
   const lock = await open(`${base}/.update-lock`, 'wx');
   try {
+    await report('running', 'Vérification de la publication');
     const previous = await realpath(`${base}/current`);
     if (!previous.startsWith(`${base}/releases/`)) throw new Error('Installation inattendue');
     const installed = JSON.parse(await readFile(path.join(previous, 'package.json'))).version;
@@ -42,7 +54,7 @@ async function main() {
       version = JSON.parse(await readFile(path.join(target, 'package.json'))).version;
     } else {
       const release = await latestRelease();
-      if (!newer(release.tag_name, installed)) { console.log('Nexus est à jour'); return; }
+      if (!newer(release.tag_name, installed)) { await report('success', 'Nexus est à jour'); console.log('Nexus est à jour'); return; }
       version = release.tag_name.slice(1);
       const name = `nexus-${release.tag_name}.json`;
       const asset = release.assets?.find(a => a.name === name);
@@ -58,17 +70,22 @@ async function main() {
       await mkdir(target, { mode: 0o755 });
       for (const [name, data] of contents) { const dest = path.join(target, name); await mkdir(path.dirname(dest), { recursive: true }); await writeFile(dest, data, { mode: 0o644, flag: 'wx' }); }
       execFileSync(process.execPath, ['--check', path.join(target, 'server/main.js')]);
+      execFileSync(process.execPath, ['--check', path.join(target, 'agent/main.js')]);
     }
     await writeFile(`${base}/previous`, previous, { mode: 0o600 });
     await switchTo(target);
     try {
-      execFileSync('systemctl', ['restart', 'nexus']);
+      await report('running', 'Redémarrage sur la nouvelle version');
+      await deployUnits(target);
+      execFileSync('systemctl', ['restart', 'nexus-agent', 'nexus']);
       if (!await healthy(version)) throw new Error('La nouvelle version ne répond pas');
+      execFileSync('systemctl', ['is-active', '--quiet', 'nexus-agent']);
     } catch (error) {
-      await switchTo(previous); execFileSync('systemctl', ['restart', 'nexus']);
+      await switchTo(previous); await deployUnits(previous); execFileSync('systemctl', ['restart', 'nexus-agent', 'nexus']);
       throw new Error(`${error.message}. Version précédente restaurée.`);
     }
+    await report('success', `Nexus ${version} installé`);
     console.log(`Nexus ${version} installé. Configuration conservée dans /etc/nexus.`);
   } finally { await lock.close(); await unlink(`${base}/.update-lock`); }
 }
-main().catch(error => { console.error(error.message); process.exitCode = 1; });
+main().catch(async error => { await report('failed', error.message).catch(() => {}); console.error(error.message); process.exitCode = 1; });

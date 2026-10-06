@@ -803,3 +803,31 @@ html[data-theme="dark"] .update-status a { color: #a9c6ff; }
 .login-panel input { width: 100%; min-height: 46px; padding: 10px; border: 1px solid #a9bddf; border-radius: 8px; font: inherit; }
 .login-error { color: #bd4141; }
 button:disabled { opacity: .5; cursor: default; }
+
+.console-status { margin: 0 0 16px; color: #bd4141; }
+.console-status:empty { display: none; }
+.console-form { display: grid; gap: 16px; }
+.console-form label, .login-panel label { display: grid; gap: 7px; font-size: 13px; }
+.console-form input, .console-form select, .console-form textarea, .file-toolbar select, .login-panel select { min-height: 42px; width: 100%; padding: 9px 12px; border: 1px solid #b9c9e5; border-radius: 8px; background: var(--surface, #fff); color: inherit; font: inherit; }
+.nexus-dialog { width: min(92vw, 650px); max-height: 88vh; overflow: auto; padding: 30px; border: 1px solid #dbe6f8; border-radius: 18px; color: #34405a; box-shadow: 0 20px 100px #0003; }
+.nexus-dialog::backdrop { background: #15243e88; backdrop-filter: blur(3px); }
+.dialog-close { float: right; border: 0; background: transparent; font-size: 26px; cursor: pointer; }
+.destructive-warning { padding: 16px; border: 1px solid #edc5bf; border-radius: 10px; color: #a2342c; background: #fff3f1; line-height: 1.5; }
+.file-toolbar { display: flex; flex-wrap: wrap; gap: 12px; align-items: end; margin-bottom: 20px; }
+.file-toolbar label { display: grid; gap: 6px; }
+.file-upload-label { cursor: pointer; min-height: 42px; padding: 10px 16px; }
+.file-upload-label input { width: 1px; height: 1px; position: absolute; opacity: 0; }
+.file-drop { padding: 24px; text-align: center; border: 2px dashed #b9c9e5; border-radius: 14px; color: #7087b3; margin: 16px 0; }
+.drag-active { background: #e6f0ff; border-color: #5279cf; }
+.member-row { display: flex !important; align-items: center; gap: 12px; padding: 8px 0; }
+.member-row input { width: 20px; min-height: 20px; }
+.member-row select { width: auto; margin-left: auto; }
+.jobs-panel { margin-top: 24px; }
+.job-failed, [role=alert] { color: #ba3b3b; }
+.job-success { color: #258764; }
+#page-storage > .panel, #page-shares > .panel, #page-users > .panel, #page-settings > .panel { margin-top: 20px; }
+#page-dashboard .panel p, #page-settings .panel p { margin: 12px 0; line-height: 1.5; overflow-wrap: anywhere; }
+fieldset { border: 1px solid #dbe6f8; border-radius: 10px; padding: 12px; }
+html[data-theme=dark] .nexus-dialog { background: #1a2131; color: #e4eaf6; border-color: #303b52; }
+html[data-theme=dark] .console-form input, html[data-theme=dark] .console-form select, html[data-theme=dark] .console-form textarea, html[data-theme=dark] .file-toolbar select, html[data-theme=dark] .login-panel select { background: #202d45; border-color: #40516d; }
+@media (max-width: 640px) { .sidebar { grid-template-columns: repeat(6, minmax(0, 1fr)); } .topbar-actions { gap: 4px; } .topbar-actions .secondary-button { padding: 6px; font-size: 9px; } .topbar-actions .help-button, .topbar-actions .icon-button:not(.theme-toggle) { display: none; } .breadcrumb > span:first-child { display: none; } .file-toolbar { align-items: stretch; } .file-toolbar > * { flex: 1 1 40%; } }

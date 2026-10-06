@@ -1,5 +1,6 @@
 const pageNames = {
   fr: {
+    files: "Fichiers",
     dashboard: "Vue d’ensemble",
     storage: "Stockage",
     shares: "Partages réseau",
@@ -7,6 +8,7 @@ const pageNames = {
     settings: "Paramètres",
   },
   en: {
+    files: "Files",
     dashboard: "Overview",
     storage: "Storage",
     shares: "Network shares",
@@ -300,7 +302,7 @@ function translateTextNodes(locale) {
   document.title = locale === "fr"
     ? "Nexus — Tableau de bord"
     : "Nexus — Dashboard";
-  document.querySelector("#current-date").textContent = formatCurrentDate(
+  if (document.querySelector("#current-date")) document.querySelector("#current-date").textContent = formatCurrentDate(
     locale === "fr" ? "fr-FR" : "en-GB",
   );
   document.querySelector("#language-select").setAttribute(
@@ -333,7 +335,7 @@ function translateTextNodes(locale) {
   document.querySelectorAll(".activity-check").forEach((element) => {
     element.setAttribute("aria-label", locale === "fr" ? "Terminé" : "Done");
   });
-  document.querySelector(".storage-summary .progress-track").setAttribute(
+  document.querySelector(".storage-summary .progress-track")?.setAttribute(
     "aria-label",
     locale === "fr" ? "40 % du stockage utilisé" : "40% of storage used",
   );

@@ -14,11 +14,20 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
+      - run: npm ci
       - run: npm test
       - run: bash -n scripts/install.sh
       - run: npm run release:pack
+      - run: npx playwright install --with-deps chromium
+      - run: npx playwright test
+      - run: sudo bash scripts/install.sh
+      - run: sudo apt-get install -y smbclient
+      - run: sudo env NEXUS_LINUX_INTEGRATION=1 /opt/nexus/runtime/bin/node --test test/linux.test.js
+      - name: Linux logs on failure
+        if: failure()
+        run: sudo journalctl -u nexus -u nexus-agent -u smbd -n 100 --no-pager
   release:
-    if: startsWith(github.ref, 'refs/tags/v')
+    if: startsWith(github.ref, 'refs/tags/v') || github.ref == 'refs/heads/main'
     needs: test
     runs-on: ubuntu-latest
     permissions:
@@ -29,6 +38,11 @@ jobs:
         with:
           node-version: '22'
       - run: npm run release:pack
-      - run: gh release create "$GITHUB_REF_NAME" dist/* --title "Nexus $GITHUB_REF_NAME" --generate-notes
+      - name: Publish version if absent
+        run: |
+          version="v$(node -p 'require("./package.json").version')"
+          if ! gh release view "$version" >/dev/null 2>&1; then
+            gh release create "$version" dist/* --target "$GITHUB_SHA" --title "Nexus $version" --generate-notes
+          fi
         env:
           GH_TOKEN: ${{ github.token }}

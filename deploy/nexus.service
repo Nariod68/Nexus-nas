@@ -1,17 +1,19 @@
 [Unit]
 Description=Nexus NAS administration
 After=network.target
+Wants=nexus-agent.service
+After=nexus-agent.service
 
 [Service]
 Type=simple
 User=nexus
 Group=nexus
 EnvironmentFile=/etc/nexus/nexus.env
-ExecStart=/usr/bin/env node /opt/nexus/current/server/main.js
+ExecStart=/opt/nexus/runtime/bin/node /opt/nexus/current/server/main.js
 Restart=on-failure
 RestartSec=3
 NoNewPrivileges=true
-ProtectSystem=strict
+ProtectSystem=full
 ProtectHome=true
 PrivateTmp=true
 ProtectKernelTunables=true
@@ -20,6 +22,9 @@ ProtectControlGroups=true
 RestrictSUIDSGID=true
 CapabilityBoundingSet=
 UMask=0077
+StateDirectory=nexus
+StateDirectoryMode=0700
+RestrictAddressFamilies=AF_UNIX AF_INET AF_INET6
 
 [Install]
 WantedBy=multi-user.target

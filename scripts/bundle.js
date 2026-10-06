@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto';
-export const files = ['package.json', 'index.html', 'app.js', 'live.js', 'styles.css', 'nexus-icon.svg', 'server/main.js', 'server/system.js', 'server/releases.js', 'scripts/update.js', 'scripts/bundle.js'];
+export const files = ['package.json', 'index.html', 'app.js', 'live.js', 'console.js', 'styles.css', 'nexus-icon.svg', 'server/main.js', 'server/system.js', 'server/releases.js', 'server/store.js', 'server/files.js', 'server/agent-client.js', 'agent/main.js', 'agent/commands.js', 'agent/disks.js', 'scripts/update.js', 'scripts/bundle.js', 'deploy/nexus.service', 'deploy/nexus-agent.service'];
 export const checksum = data => createHash('sha256').update(data).digest('hex');
 export function validateBundle(bytes, expectedHash, version) {
   if (!/^[a-f0-9]{64}$/.test(expectedHash) || checksum(bytes) !== expectedHash) throw new Error('Intégrité SHA-256 incorrecte');
